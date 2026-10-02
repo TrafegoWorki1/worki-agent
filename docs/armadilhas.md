@@ -146,3 +146,45 @@ seu. Se nao aparecer nenhum, esse nao e o seu numero de WhatsApp.
 Regra: `WHATSAPP_NUMERO_AUTORIZADO` tem que ser o numero que a Evolution
 anexa no `remoteJid` — ou seja, o chip que **manda** a mensagem, nunca o
 que **recebe**.
+## 16. Evolution `sendText` devolve 201, nao 200
+
+Envio aceito responde **201 Created** (o body traz a `key` da mensagem).
+Aceitar so `200` faz todo envio parecer falha: o relay marca a fala como nao
+entregue e re-enfileira, mesmo com a mensagem entregue. Loop infinito de
+resposta duplicada.
+
+Aceitar `(200, 201)`.
+
+Armadilha maior: `curl` sem `-w` nao mostra o status, entao um teste manual
+"passa" e o bug so aparece no log do relay.
+
+## 17. O PostgREST nao avalia expressao no PATCH
+
+```python
+body={"respondido_em": "now()"}   # grava a LITERAL "now()" num timestamptz
+```
+
+Calcular o timestamp em Python e mandar ISO-8601. Vale para qualquer coluna
+com `default now()` que voce queira sobrescrever.
+
+## 18. Regex de "remover acentos" quebra arquivo
+
+`re.sub(r'[^\x00-\x7F]', '', texto)` remove as aspas de um docstring mal
+formado sem avisar, e o SyntaxError aparece longe da causa. Em vez de
+corrigir depois, escrever ASCII desde o inicio: arquivo novo em PT-BR vai
+sem acento, e o linter para de reclamar.
+
+## 19. `hermes -z` e o runner de one-shot
+
+Para responder sem sessao aberta, usar `hermes -z PROMPT`. Roda o agente
+COMPLETO (ferramentas, memoria, skills) e imprime so a resposta.
+
+```
+hermes -z "qual seu nome?"   # -> resposta em stdout
+```
+
+Vantagem sobre chamar a API do modelo na mao: usa o login que ja existe
+(OAuth Nous), sem chave nova no `.env`, e o agente vem com as skills do
+repo. Uma chamada HTTP traria so texto, sem ferramenta.
+
+O `-q` NAO existe neste build. So `-z` / `--oneshot`.

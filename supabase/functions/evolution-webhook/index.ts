@@ -117,6 +117,48 @@ async function responder(numero, texto) {
   }
 }
 
+/**
+ * Enfileira a mensagem para o relay responder.
+ *
+ * Toda mensagem autorizada entra aqui — nao ha lista de comandos. E conversa.
+ * O relay roda na maquina do Herickson, le a fila, responde e marca.
+ *
+ * Devolve o id da fala, ou null se falhar. Nunca lanca: uma falha aqui
+ * impede a resposta, mas derrubar a request faria a Evolution repetir.
+ */
+async function enfileirar(numero, texto) {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) {
+    console.error('enfileirar: env ausente');
+    return null;
+  }
+  try {
+    const r = await fetch(`${url}/rest/v1/falas`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        // return=representation para pegar o id de volta. Aqui NAO vale a
+        // regra do auditoria: o service_role tem SELECT, entao o 401 de RLS
+        // nao acontece. Sem isso nao sabemos o id para marcar depois.
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({ de: numero, texto }),
+    });
+    if (!r.ok) {
+      console.error('enfileirar falhou:', r.status, (await r.text()).slice(0, 200));
+      return null;
+    }
+    const rows = await r.json();
+    return rows?.[0]?.id ?? null;
+  } catch (e) {
+    console.error('enfileirar erro:', e.message);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   // CORS: a Evolution chama server-side, mas nao custa liberar.
   const cors = {
@@ -176,15 +218,22 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // ---- Fase 1: criterio de pronto ----
+    // ---- Conversa livre ----
+    // Toda mensagem autorizada vira uma fala na fila. Nao ha lista de
+    // comandos: e conversa. O relay le a fila e responde.
+    //
+    // 'ping' continua respondendo na hora, para provar o caminho completo
+    // sem depender do relay estar no ar.
     const cmd = (m.texto || '').trim().toLowerCase();
     if (cmd === 'ping') {
       const ok = await responder(m.de, 'pong');
       if (ok) respondidos++;
+      detalhes.push({ de: m.de.slice(-4), permissao });
+      continue;
     }
-    // Futuras skills entram aqui.
 
-    detalhes.push({ de: m.de.slice(-4), permissao });
+    const fala = await enfileirar(m.de, m.texto);
+    detalhes.push({ de: m.de.slice(-4), permissao, fala: fala ? 'enfileirada' : 'falhou' });
   }
 
   return Response.json(
