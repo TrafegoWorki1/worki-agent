@@ -1,4 +1,4 @@
-"""Store de aprovacoes no Supabase (tabela `aprovacoes`).
+"""Store de aprovacoes no Supabase (tabela `acoes_pendentes`).
 
 O guard (`integracoes/aprovacao/guard.py`) define a regra. Este modulo
 fala com o banco. A separacao existe porque a regra e testavel sem banco
@@ -44,12 +44,13 @@ def _de_row(row: dict) -> Aprovacao:
         id=str(row.get("id") or ""),
         acao=row.get("acao") or "",
         alvo=row.get("alvo") or "",
-        artifact_hash=row.get("artifact_hash") or "",
+        artifact_hash=row.get("payload_hash") or row.get("artifact_hash") or "",
         requested_by=row.get("solicitado_por") or "",
-        approved_by=row.get("aprovado_por") or "",
-        approved_at=_dt(row.get("aprovado_em")),
+        approved_by=row.get("aprovador") or row.get("aprovado_por") or "",
+        approved_at=_dt(row.get("decidido_em") or row.get("aprovado_em")),
         expires_at=_dt(row.get("expira_em")) or datetime.now(timezone.utc),
-        status=row.get("status") or "pendente",
+        status={"confirmada": "aprovada", "aguardando": "pendente"}.get(
+            row.get("status"), row.get("status") or "pendente"),
     )
 
 
@@ -72,46 +73,58 @@ class StoreAprovacoes:
         filtro, um "sobe" dado num grupo autorizaria producao no privado.
         """
         filtro = f"&conversa_id=eq.{self.conversa_id}" if self.conversa_id else ""
+        if task_id:
+            filtro += f"&tarefa_id=eq.{task_id}"
         if acao:
             filtro += f"&acao=eq.{acao}"
         linhas = db._rest(
             "GET",
-            f"/rest/v1/aprovacoes?status=in.(pendente,aprovada){filtro}"
+            f"/rest/v1/acoes_pendentes?status=in.(aguardando,confirmada){filtro}"
             f"&order=criado_em.desc&limit=10",
             prefer="return=representation",
         ) or []
         return [_de_row(l) for l in linhas]
 
     def registrar_pendente(self, ap: Aprovacao, conversation_id: str = ""):
-        """Grava o pedido e devolve o id (o Guard ja tem o objeto)."""
-        linhas = db._rest(
-            "POST", "/rest/v1/aprovacoes",
-            body={
-                "conversa_id": conversation_id or self.conversa_id or None,
-                "entrada_id": self.entrada_id or None,
-                "acao": ap.acao,
-                "alvo": ap.alvo,
-                "artifact_hash": ap.artifact_hash,
-                "status": "pendente",
-                "solicitado_por": ap.requested_by,
-                "expira_em": _iso(ap.expires_at),
-            },
-            prefer="return=representation",
-        )
-        if linhas:
-            ap.id = str(linhas[0]["id"])
+        """Pede aprovação pela RPC atômica e devolve o id."""
+        valor = db._rpc("worki_pedir_aprovacao", {
+            "p_conversa_id": conversation_id or self.conversa_id,
+            "p_acao": ap.acao, "p_alvo": ap.alvo,
+            "p_payload_hash": ap.artifact_hash,
+            "p_descricao": ap.metadata.get("descricao", ""),
+            "p_payload": ap.metadata.get("payload", {}),
+        })
+        if isinstance(valor, list):
+            valor = valor[0] if valor else None
+        if valor is not None:
+            ap.id = str(valor)
         return ap
 
     def salvar(self, ap: Aprovacao, conversation_id: str = ""):
+        if ap.status == "aprovada":
+            valor = db._rpc("worki_aprovar_acao", {
+                "p_conversa_id": conversation_id or self.conversa_id,
+                "p_palavra": next((p for p, acts in {
+                    "aprova": {"merge"}, "sobe": {"deploy_producao"},
+                    "confirma": {"campanha_anuncio", "alterar_orcamento",
+                                  "pausar_anuncio", "gasto"},
+                }.items() if ap.acao in acts), ""),
+                "p_aprovador": "558592494552@s.whatsapp.net",
+                "p_acao_id": int(ap.id),
+            })
+            return valor
+        status = {"pendente": "aguardando", "aprovada": "confirmada"}.get(
+            ap.status, ap.status)
         corpo = {
-            "status": ap.status,
-            "aprovado_por": ap.approved_by or None,
-            "aprovado_em": _iso(ap.approved_at) if ap.approved_at else None,
+            "status": status,
+            "aprovador": ap.approved_by or None,
+            "decidido_em": _iso(ap.approved_at) if ap.approved_at else None,
             "expira_em": _iso(ap.expires_at),
         }
-        db._rest("PATCH", f"/rest/v1/aprovacoes?id=eq.{ap.id}", body=corpo)
+        db._rest("PATCH", f"/rest/v1/acoes_pendentes?id=eq.{ap.id}", body=corpo)
 
-    def consumir(self, ap_id: str, conversation_id: str = ""):
+    def consumir(self, ap_id: str, conversation_id: str = "", acao: str = "",
+                 alvo: str = "", payload_hash: str = ""):
         """Consome atomicamente via RPC.
 
         Nao e um PATCH. Se fosse, dois processos poderiam ler
@@ -119,11 +132,14 @@ class StoreAprovacoes:
         e devolve quantas linhas mudou; so quem ganhou segue.
         """
         linhas = db._rpc("worki_consumir_aprovacao", {
-            "p_aprovacao_id": ap_id,
-            "p_agora": _iso(datetime.now(timezone.utc)),
+            "p_acao_id": int(ap_id),
+            "p_conversa_id": conversation_id or self.conversa_id,
+            "p_acao": acao,
+            "p_alvo": alvo,
+            "p_payload_hash": payload_hash,
         })
-        if isinstance(linhas, int):
-            return linhas > 0
+        if isinstance(linhas, bool):
+            return linhas
         if isinstance(linhas, list) and linhas:
             return bool(linhas[0])
         return False

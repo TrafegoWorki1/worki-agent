@@ -212,7 +212,6 @@ class Adaptador:
         if contexto:
             texto_prompt = f"{contexto.rstrip()}\n\n---\n\n{prompt}"
 
-        antes, antes_ids = _snapshot_inicio()
         cmd = self._comando(texto_prompt, session_id)
         log_cmd = (
             f"{self.binario} chat -q [--resume {session_id}]"
@@ -246,9 +245,10 @@ class Adaptador:
         stderr = (proc.stderr or "").strip()
         log = f"{log_cmd}\n{stderr[:1000]}"
 
-        # Caminho principal: o proprio Hermes reporta o id no stderr.
-        # Fallback: state.db, para versao que mude o formato.
-        novo = _id_do_stderr(stderr) or _sessao_nova(antes, antes_ids) or session_id
+        # Somente o ID reportado por esta execucao pode ser associado à
+        # conversa. Nunca escolher a sessão mais recente do state.db: outro
+        # processo pode tê-la criado.
+        novo = _id_do_stderr(stderr) or session_id
 
         if proc.returncode != 0:
             return Resultado(

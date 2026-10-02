@@ -35,6 +35,7 @@ RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 COPY integracoes/ /app/integracoes/
 COPY docs/ /app/docs/
 COPY AGENTS.md /app/AGENTS.md
+COPY --chmod=755 entrypoint.sh /usr/local/bin/worki-entrypoint
 
 # --------------------------------------------------------------------------
 # Diretorios de estado
@@ -49,7 +50,8 @@ COPY AGENTS.md /app/AGENTS.md
 # nativo, o resume de sessao quebra sem erro. Ver docs/deploy-easypanel.md.
 RUN mkdir -p /opt/data /workspace \
     && chmod 700 /opt/data \
-    && chmod 777 /workspace
+    && chmod 777 /workspace \
+    && chown -R hermes:hermes /opt/data /workspace /app /usr/local/bin/worki-entrypoint
 
 ENV HERMES_HOME=/opt/data \
     WORKI_HERMES_HOME=/opt/data \
@@ -83,9 +85,6 @@ USER hermes
 # falha de um apareca. Aqui o receptor e o worker sao gerenteados por um
 # supervisor Python que reinicia e mantem log e codigo de saida — e o
 # s6 nativo da imagem continua cuidando do `gateway run` da propria imagem.
-COPY entrypoint.sh /usr/local/bin/worki-entrypoint
-RUN chmod +x /usr/local/bin/worki-entrypoint
-
 EXPOSE 8080
 
 # Health: liveness barato. O EasyPanel usa /ready para nao mandar trafego

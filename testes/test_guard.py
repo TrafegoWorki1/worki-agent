@@ -62,10 +62,12 @@ class StoreMemoria:
         self.itens = [a for a in self.itens if a.id != ap.id]
         self.itens.append(ap)
 
-    def consumir(self, ap_id, conversation_id=""):
+    def consumir(self, ap_id, conversation_id="", acao="", alvo="", payload_hash=""):
         for a in self.itens:
             if a.id == ap_id:
                 a.status = "consumida"
+                return True
+        return False
 
 
 def main():

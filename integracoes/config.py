@@ -38,7 +38,8 @@ def _do_arquivo() -> dict:
 
 
 # Arquivo primeiro, ambiente por cima. Ordem importa.
-_CFG = {**_do_arquivo(), **{k: v for k, v in os.environ.items() if v}}
+_CFG = {**_do_arquivo(), **{k: v for k, v in os.environ.items()
+                            if k.isupper()}}
 
 
 def chave(nome: str, padrao: str | None = None, obrigatorio: bool = True) -> str:
@@ -49,6 +50,8 @@ def chave(nome: str, padrao: str | None = None, obrigatorio: bool = True) -> str
     sem.
     """
     v = _CFG.get(nome, "").strip()
+    if v == "***":
+        v = ""
     if v:
         return v
     if obrigatorio:

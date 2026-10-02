@@ -33,6 +33,10 @@ if ! "$PY" -c "from integracoes.config import Config; Config.carregar()" 2>/tmp/
     log "O container nao sobe. Veja docs/deploy-easypanel.md."
     exit 78   # EX_CONFIG
 fi
+if [ -z "${WORKI_WEBHOOK_SECRET:-}" ] || [ "${WORKI_WEBHOOK_SECRET:-}" = "***" ]; then
+    log "CONFIGURACAO INVALIDA: WORKI_WEBHOOK_SECRET e obrigatorio"
+    exit 78
+fi
 log "configuracao ok"
 
 # --- volumes ---

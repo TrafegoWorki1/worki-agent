@@ -25,6 +25,7 @@ import os
 import socket
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -173,17 +174,16 @@ def registrar_evento(ev) -> tuple[str | None, bool]:
     linhas = _rpc("worki_registrar_evento", {
         "p_instancia": ev.instancia,
         "p_chat_jid": ev.chat_jid,
-        "p_de": ev.remetente_numeros or ev.remetente_jid,
-        "p_grupo_jid": ev.grupo,
+        "p_remetente": ev.remetente_jid or ev.remetente_numeros,
         "p_provider_message_id": ev.provider_message_id,
-        "p_tipo_mensagem": ev.tipo_mensagem,
+        "p_tipo": ev.tipo_mensagem or "conversation",
         "p_texto": ev.texto,
     })
     if not linhas:
         return None, False
     linha = linhas[0]
     return (str(linha["entrada_id"]) if linha.get("entrada_id") else None,
-            bool(linha.get("ja_existia")))
+            bool(linha.get("duplicado")))
 
 
 # --------------------------------------------------------------------------
@@ -203,12 +203,36 @@ def dono() -> str:
 def reservar(limite: int = 1, lease_s: int = 120) -> list[Entrada]:
     """Reserva atomicamente. Vazio quando nao ha nada."""
     linhas = _rpc("worki_reservar_entrada", {
-        "p_owner": dono(),
-        "p_agora": iso(agora()),
-        "p_lease_s": lease_s,
-        "p_limite": limite,
+        "p_owner": dono(), "p_lease_s": lease_s,
     }, timeout=30)
-    return [Entrada.de_row(l) for l in linhas] if linhas else []
+    if not linhas:
+        return []
+    # A reserva retorna apenas IDs. Buscar os dados fora da RPC mantém a
+    # transação curta e evita depender de joins que não fazem parte do
+    # contrato.
+    entradas = []
+    for row in linhas:
+        entrada_id = str(row["id"])
+        eid = urllib.parse.quote(entrada_id, safe="")
+        erows = _rest("GET", f"/rest/v1/entradas?id=eq.{eid}&select=id,mensagem_id,conversa_id,tentativas",
+                      prefer="return=representation")
+        if not erows:
+            continue
+        e = erows[0]
+        mids = urllib.parse.quote(str(e["mensagem_id"]), safe="")
+        msgs = _rest("GET", f"/rest/v1/mensagens?id=eq.{mids}&select=texto,remetente",
+                     prefer="return=representation")
+        cid = urllib.parse.quote(str(e["conversa_id"]), safe="")
+        convs = _rest("GET", f"/rest/v1/conversas?id=eq.{cid}&select=session_id,chat_jid",
+                      prefer="return=representation")
+        m = msgs[0] if msgs else {}
+        c = convs[0] if convs else {}
+        entradas.append(Entrada(id=entrada_id, mensagem_id=str(e["mensagem_id"]),
+                                conversa_id=str(e["conversa_id"]),
+                                session_id=c.get("session_id"), texto=m.get("texto") or "",
+                                de=m.get("remetente") or "", chat_jid=c.get("chat_jid") or "",
+                                tentativas=int(e.get("tentativas") or 0)))
+    return entradas
 
 
 def renovar(entrada_id: str, lease_s: int = 120) -> bool:
@@ -216,17 +240,31 @@ def renovar(entrada_id: str, lease_s: int = 120) -> bool:
     return bool(_rpc("worki_renovar_lease", {
         "p_entrada_id": entrada_id,
         "p_owner": dono(),
-        "p_agora": iso(agora()),
         "p_lease_s": lease_s,
     }))
 
 
+def iniciar_entrada(entrada_id: str) -> str:
+    valor = _rpc("worki_iniciar_entrada", {"p_entrada_id": entrada_id, "p_owner": dono()})
+    return str(valor[0] if isinstance(valor, list) else valor)
+
+
+def concluir_atomic(entrada_id: str, session_id: str, resposta: str,
+                    sucesso: bool = True) -> str:
+    valor = _rpc("worki_concluir_entrada", {
+        "p_entrada_id": entrada_id, "p_owner": dono(),
+        "p_session_id": session_id, "p_resposta": resposta,
+        "p_sucesso": sucesso,
+    })
+    return str(valor[0] if isinstance(valor, list) else valor)
+
+
 def concluir(entrada_id: str, erro: str | None = None) -> None:
-    """`erro=None` conclui; com erro, devolve para a fila com backoff."""
+    """Compatibility path for a failed entry; successful work is atomic."""
     _rpc("worki_concluir_entrada", {
-        "p_entrada_id": entrada_id,
-        "p_owner": dono(),
-        "p_erro": (erro[:500] if erro else None),
+        "p_entrada_id": entrada_id, "p_owner": dono(),
+        "p_session_id": "erro", "p_resposta": erro or "",
+        "p_sucesso": False,
     })
 
 
@@ -236,7 +274,9 @@ def recuperar_leases() -> int:
     Um worker morto no meio deixa a entrada em 'processando'. Sem isto,
     ela fica presa para sempre.
     """
-    linhas = _rpc("worki_recuperar_leases", {"p_agora": iso(agora())})
+    linhas = _rpc("worki_recuperar_leases", {})
+    if isinstance(linhas, dict):
+        return int(linhas.get("tarefas_bloqueadas", 0))
     if linhas is None:
         return 0
     if isinstance(linhas, int):
@@ -350,25 +390,16 @@ def registrar_saida(entrada_id: str, chat_jid: str, texto: str) -> str | None:
     """
     if not texto or not texto.strip():
         raise ValueError("texto vazio nao vai para a outbox")
-    saida_id = _rpc("worki_registrar_saida", {
-        "p_entrada_id": entrada_id,
-        "p_chat_jid": chat_jid,
-        "p_texto": texto,
-        "p_idempotency_key": chave_idempotencia(entrada_id, texto),
-    })
-    if isinstance(saida_id, list):
-        saida_id = saida_id[0] if saida_id else None
-    return str(saida_id) if saida_id else None
+    raise FilaNaoDisponivel("saida deve ser criada por worki_concluir_entrada")
 
 
 def marcar_saida(saida_id: str, status: str,
                 provider_message_id: str | None = None,
                 erro: str | None = None) -> None:
-    _rpc("worki_marcar_saida", {
-        "p_saida_id": saida_id,
-        "p_status": status,
-        "p_provider_message_id": provider_message_id,
-        "p_erro": (erro[:500] if erro else None),
+    estado = "enviada" if status in ("entregue", "enviada") else status
+    _rpc("worki_registrar_envio", {
+        "p_saida_id": saida_id, "p_owner": dono(),
+        "p_estado": estado, "p_provider_message_id": provider_message_id,
     })
 
 
@@ -385,10 +416,15 @@ def saidas_pendentes(limite: int = 10) -> list[dict]:
     da fila.
     """
     return _rest(
-        "GET",
-        f"/rest/v1/saidas?status=in.(pendente,enviando,falhou,incerto)"
+        "GET", f"/rest/v1/saidas?status=in.(pendente,enviando,falhou,incerto)"
         f"&order=criado_em.asc&limit={limite}",
         prefer="return=representation") or []
+
+
+def reservar_saida(limite: int = 10, lease_s: int = 120) -> list[dict]:
+    """Reserva atomicamente uma saida; a RPC ja marca `enviando`."""
+    linhas = _rpc("worki_reservar_saida", {"p_owner": dono(), "p_lease_s": lease_s})
+    return linhas or []
 
 
 def saidas_incertainas(limite: int = 10) -> list[dict]:

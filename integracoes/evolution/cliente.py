@@ -57,9 +57,10 @@ def enviar_texto(numero: str, texto: str, timeout: int = 45) -> tuple[str, str |
     """
     c = cfg()
     url = f"{c.EVOLUTION_API_URL}/message/sendText/{c.EVOLUTION_INSTANCE}"
+    destino = str(numero or "") if str(numero or "").endswith("@g.us") else digitos(numero)
     req = urllib.request.Request(
         url,
-        data=json.dumps({"number": digitos(numero), "text": texto}).encode(),
+        data=json.dumps({"number": destino, "text": texto}).encode(),
         headers=_headers(), method="POST",
     )
     try:

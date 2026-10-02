@@ -187,7 +187,13 @@ class Guard:
             for ap in self.store.listar(task_id=task_id, acao=acao):
                 ok, _ = ap.valida(acao, alvo, artefato)
                 if ok:
-                    self.store.consumir(ap.id, conversation_id)
+                    consumida = self.store.consumir(
+                        ap.id, conversation_id, acao, alvo, artefato)
+                    if consumida is not True:
+                        raise Bloqueado(
+                            "a aprovacao nao pode ser consumida; acao bloqueada",
+                            acao=acao, alvo=alvo,
+                        )
                     ap.status = "consumida"
                     return ap
 

@@ -196,8 +196,11 @@ class Relay:
 
             # 2. tarefa ANTES de executar: objetivo e proxima acao ficam
             # no banco, entao um reinicio sabe o que falta.
-            tarefa_id = self.db.criar_tarefa(
-                entrada.conversa_id, entrada.id, entrada.texto[:300])
+            if hasattr(self.db, "iniciar_entrada"):
+                tarefa_id = self.db.iniciar_entrada(entrada.id)
+            else:
+                tarefa_id = self.db.criar_tarefa(
+                    entrada.conversa_id, entrada.id, entrada.texto[:300])
 
             # 3. Hermes. `--resume` so com id desta conversa.
             r = self.hermes.responder(
@@ -230,8 +233,13 @@ class Relay:
 
             # 4. OUTBOX ANTES DO ENVIO. A partir daqui a retentativa so
             # reenvia: o Hermes nao roda de novo.
-            saida_id = self.db.registrar_saida(
-                entrada.id, entrada.chat_jid, r.texto)
+            if hasattr(self.db, "concluir_atomic"):
+                saida_id = self.db.concluir_atomic(
+                    entrada.id, r.session_id or entrada.session_id or "",
+                    r.texto, True)
+            else:
+                saida_id = self.db.registrar_saida(
+                    entrada.id, entrada.chat_jid, r.texto)
 
             if not saida_id:
                 # Sem outbox nao ha garantia de entrega unica. Devolver
@@ -242,7 +250,7 @@ class Relay:
                 return Resultado(False, None, r.session_id,
                                  "registrar_saida devolveu vazio")
 
-            if tarefa_id:
+            if tarefa_id and not hasattr(self.db, "concluir_atomic"):
                 self.db.salvar_progresso(
                     tarefa_id,
                     checkpoint=f"resposta pronta: {r.texto[:500]}",
@@ -252,10 +260,11 @@ class Relay:
 
             # 5. concluir a entrada ANTES de enviar. Se cair aqui, a
             # entrega fica para o `entregar_saidas` e o Hermes nao repete.
-            self.db.concluir(entrada.id)
+            if not hasattr(self.db, "concluir_atomic"):
+                self.db.concluir(entrada.id)
 
             # 6. enviar.
-            estado, mid = self.ev.enviar_texto(entrada.de, r.texto)
+            estado, mid = self.ev.enviar_texto(entrada.chat_jid, r.texto)
             self.db.marcar_saida(
                 saida_id,
                 estado if estado != "incerto" else "incerto",
@@ -297,7 +306,8 @@ class Relay:
         Devolve (entregues, falhos, incertos).
         """
         entregues = falhos = incertos = 0
-        for saida in self.db.saidas_pendentes():
+        buscar_saidas = getattr(self.db, "reservar_saida", self.db.saidas_pendentes)
+        for saida in buscar_saidas():
             texto = saida.get("texto") or ""
             chat = saida.get("chat_jid") or ""
             if not texto or not chat:
@@ -330,17 +340,21 @@ class Relay:
                         continue
                 except Exception as e:
                     log.warning("reconciliacao falhou: %s", e)
-                    estado, mid = self.ev.enviar_texto(chat, texto)
+                    self.db.marcar_saida(str(saida["id"]), "incerto",
+                                         erro="reconciliacao inconclusiva")
+                    incertos += 1
+                    continue
             else:
                 # Marca `enviando` ANTES de chamar a Evolution. Sem isso,
                 # um crash no meio deixa a linha em `pendente` e a
                 # proxima rodada reenvia sem tentar reconciliar — que e
                 # exatamente o envio duplicado que o estado existe para
                 # impedir.
-                try:
-                    self.db.marcar_saida(str(saida["id"]), "enviando")
-                except Exception as e:
-                    log.warning("nao marquei enviando: %s", e)
+                if not hasattr(self.db, "reservar_saida"):
+                    try:
+                        self.db.marcar_saida(str(saida["id"]), "enviando")
+                    except Exception as e:
+                        log.warning("nao marquei enviando: %s", e)
                 estado, mid = self.ev.enviar_texto(chat, texto)
 
             if estado == ev.Estado.ENTREGUE:
