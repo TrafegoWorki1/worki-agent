@@ -7,6 +7,14 @@
 !.env.example
 !*.env.example
 
+# Supabase CLI guarda credencial do projeto linkado aqui
+supabase/.temp/
+.temp/
+
+# Vercel
+.vercel
+.vercel.json
+
 # Chaves soltas em qualquer lugar do repo
 *.pem
 *.key
