@@ -22,11 +22,13 @@ automaticamente. Mande so as suas.
 O body e um **array puro**, nao `{"secrets": [...]}`. Errar isso da
 `Invalid input: expected array, received object`.
 
-## 3. `/pg/query` responde 404 neste plano
+## 3. Um 404 em `/pg/query` nao comprova limitacao do plano
 
-A API de SQL nao esta liberada. Nao da para criar tabela por aqui. Se mudar
-o schema: Dashboard > SQL Editor, colar o arquivo. Ver
-`schema_para_colar.sql`.
+Atualizado em 2026-10-02: leitura SQL e aplicacao de migracoes funcionaram
+no projeto Agente Dominante pelo conector Supabase. O endpoint e o
+contrato da API devem ser conferidos antes de atribuir um 404 ao plano.
+O schema agora esta versionado em `supabase/migrations/`. Nao aplicar
+`integracoes/supabase/migrations/001_fila.sql`: ela duplica o schema em ingles.
 
 ## 4. `Prefer: return=representation` no POST mente
 
