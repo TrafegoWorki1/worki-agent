@@ -1,0 +1,18 @@
+# Dependencias do servico worki-agent.
+#
+# Sem numeros fixados de proposito nesta primeira versao: a imagem base
+# (Hermes oficial) ja traz Python 3.14 e o conjunto de libs do agente.
+# Fixar aqui sem testar contra a base pode conflitar com o que ja vem
+# instalado e a imagem passar a falhar no build.
+#
+# O codico usa SO a biblioteca padrao: urllib, json, sqlite3,
+# http.server, threading. Nao ha dependencia de rede.
+#
+# Se entrar dependencia nova, anote o motivo e o numero fixado aqui:
+#   requests==2.32.3   # motivo: ...
+#
+# ATENCAO: estas versoes precisam ser testadas contra a imagem fixada
+# por digest antes do primeiro deploy.
+
+# Nenhuma dependencia externa de terceiros hoje.
+# Requer Python >= 3.11 (dataclass com slots, tomllib, ExceptionGroup).
