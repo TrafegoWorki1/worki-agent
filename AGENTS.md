@@ -25,8 +25,14 @@ canais.
 **Somente o numero do Herickson comanda o agente.**
 
 ```
-WHATSAPP_NUMERO_AUTORIZADO=5585999515154
+WHATSAPP_NUMERO_AUTORIZADO=558592494552   (WhatsApp — o chip de verdade)
+TELEGRAM_NUMERO=5585999515154             (Telegram — so pelo gateway)
 ```
+
+Os dois numeros do Herickson sao diferentes. **A allowlist do WhatsApp usa o
+WhatsApp.** O Telegram nao passa pelo webhook da Evolution e nunca deve estar
+na allowlist — se estiver, o numero nunca casa e o agente fica mudo sem erro
+aparente.
 
 - O chip do agente (`558586661513`) **nao** e autorizado a comandar.
   Ele recebe, processa e responde. Nao da ordem.

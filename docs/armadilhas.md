@@ -124,3 +124,25 @@ valor.
 
 Nao use `patch` para editar `.env` aqui. Reescreva com `write_file` reindo
 antes, e confira com `grep -c` quantas ocorrencias existem.
+
+## 15. A allowlist do WhatsApp nao e o numero do Telegram
+
+O Herickson tem **dois numeros diferentes**:
+
+```
+WhatsApp: 558592494552   ← este vai na allowlist do webhook
+Telegram: 5585999515154  ← so pelo gateway
+```
+
+Colocar o Telegram na allowlist nao da erro nenhum: a secret e gravada, o
+health check responde `allowlist: true`, os testes com numero errado passam.
+O agente fica **mudo** porque o numero real nunca casa, e nada no log
+aponta o motivo.
+
+Como descobrir: `instance/fetchInstances` lista os `ownerJid` de cada
+instancia. Contar quantas instancias tem o numero que voce acha que e o
+seu. Se nao aparecer nenhum, esse nao e o seu numero de WhatsApp.
+
+Regra: `WHATSAPP_NUMERO_AUTORIZADO` tem que ser o numero que a Evolution
+anexa no `remoteJid` — ou seja, o chip que **manda** a mensagem, nunca o
+que **recebe**.
