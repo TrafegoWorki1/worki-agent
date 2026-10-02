@@ -15,9 +15,12 @@ usam `mensagens`, `conversas`, `entradas`, `saidas`, `acoes_pendentes`.
 Criadas apenas as estruturas faltantes: `tarefas`, `etapas_tarefa`, `memorias`.
 Nenhuma tabela equivalente em ingles foi criada.
 
-**Nao aplicar `integracoes/supabase/migrations/001_fila.sql`.** Os clientes
-`queue.py` e `outbox.py` do PR #1 ainda usam o contrato em ingles: precisam
-ser adaptados. Os contratos reais completos estao em `contrato-rpcs.json`.
+**Nao reaplicar a antiga `001_fila.sql`.** Ela foi removida em `e0783c6`.
+O cliente ativo `integracoes/supabase/queue.py` ja usa nomes em portugues,
+mas seus parametros, retornos e fluxo ainda divergem do banco aplicado.
+Usar este documento e `contrato-rpcs.json` como contrato final verificado;
+`contrato-rpcs.md` registra a proposta anterior da aplicacao. As diferencas
+e correcoes de fechamento estao em `revisao-e0783c6.md`.
 Os IDs de conversa, mensagem, entrada, saida, tarefa e memoria sao UUIDs.
 Somente `acoes_pendentes.id` continua bigint. Nao converter UUID para int.
 
