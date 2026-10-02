@@ -2,7 +2,17 @@
 .env
 .env.local
 .env.*.local
+.env.*
+*.env
 !.env.example
+!*.env.example
+
+# Chaves soltas em qualquer lugar do repo
+*.pem
+*.key
+credentials.json
+service-role*.json
+secrets*
 
 # Python
 __pycache__/
