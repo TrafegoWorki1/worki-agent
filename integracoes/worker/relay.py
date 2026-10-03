@@ -298,12 +298,17 @@ class Relay:
                                  "lease perdida durante a execucao")
 
             if not r.ok:
-                self.db.concluir(entrada.id, r.log or "hermes falhou")
+                # Preserva a sessao (r.session_id, ou a que a conversa ja
+                # tinha) para o --resume da proxima mensagem continuar o
+                # contexto. O log tecnico fica no servidor, nao no WhatsApp.
+                self.db.concluir(entrada.id, r.log or "hermes falhou",
+                                 session_id=r.session_id or entrada.session_id)
                 self.falhas += 1
                 return Resultado(False, None, r.session_id, r.log)
 
             if not r.texto or not r.texto.strip():
-                self.db.concluir(entrada.id, "resposta vazia")
+                self.db.concluir(entrada.id, "resposta vazia",
+                                 session_id=r.session_id or entrada.session_id)
                 return Resultado(False, None, r.session_id, "resposta vazia")
 
             # sessao gravada antes de qualquer outra coisa: e o que faz a

@@ -21,6 +21,7 @@ NUNCA serao criadas. Fica no repo como historico, e nao e importado.
 
 import hashlib
 import json
+import logging
 import os
 import socket
 import sys
@@ -33,6 +34,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from integracoes.config import Config  # noqa: E402
+
+log = logging.getLogger("worki.queue")
+
+# Mensagem neutra que o usuario recebe quando uma tarefa falha. O detalhe
+# tecnico NUNCA vai para o WhatsApp: fica no log do servidor e no banco.
+MENSAGEM_FALHA_PADRAO = (
+    "Tive um problema ao processar isso agora. Pode reenviar ou reformular?"
+)
 
 _CFG = None
 
@@ -264,11 +273,32 @@ def concluir_atomic(entrada_id: str, session_id: str, resposta: str,
     return str(valor[0] if isinstance(valor, list) else valor)
 
 
-def concluir(entrada_id: str, erro: str | None = None) -> None:
-    """Compatibility path for a failed entry; successful work is atomic."""
+def concluir(entrada_id: str, erro: str | None = None,
+             session_id: str | None = None,
+             mensagem_usuario: str | None = None) -> None:
+    """Conclui uma entrada que falhou. Caminho de erro; o sucesso e atomico.
+
+    Tres garantias, cada uma fechando um bug real:
+
+    1. A sessao do Hermes e PRESERVADA. `p_session_id=None` faz o SQL manter
+       (coalesce) o session_id atual da conversa. Antes gravava-se a string
+       'erro', e o --resume da proxima mensagem quebrava com um id inexistente.
+    2. O usuario recebe uma mensagem curta e neutra, NUNCA o log tecnico.
+       Antes o `erro` (ate 1000 chars de traceback do Hermes) ia direto para
+       o WhatsApp como texto da saida.
+    3. O detalhe tecnico (`erro`) vai so para o log do servidor.
+
+    `session_id`: passe o id real da execucao para preserva-lo explicitamente;
+    None mantem o que ja esta na conversa. `mensagem_usuario`: sobrescreve a
+    mensagem neutra padrao quando o chamador tem algo melhor a dizer.
+    """
+    if erro:
+        log.warning("entrada %s concluida com falha: %s",
+                    entrada_id, str(erro)[:500])
     _rpc("worki_concluir_entrada", {
         "p_entrada_id": entrada_id, "p_owner": dono(),
-        "p_session_id": "erro", "p_resposta": erro or "",
+        "p_session_id": session_id,
+        "p_resposta": mensagem_usuario or MENSAGEM_FALHA_PADRAO,
         "p_sucesso": False,
     })
 
