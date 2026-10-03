@@ -41,6 +41,11 @@ WORKDIR /app
 COPY integracoes/ /app/integracoes/
 COPY docs/ /app/docs/
 COPY AGENTS.md /app/AGENTS.md
+# O Hermes le AGENTS.md do DIRETORIO DE TRABAALHO (cwd), nao do /app.
+# Sem copiar para ca, o agente roda sem identidade, sem allowlist e
+# sem as prohibicoes de venda: em 2026-10-03 /workspace estava vazio e
+# o agente respondeu sem nenhuma regra do repo.
+COPY AGENTS.md /workspace/AGENTS.md
 COPY --chmod=755 entrypoint.sh /usr/local/bin/worki-entrypoint
 
 # --------------------------------------------------------------------------

@@ -190,15 +190,34 @@ class Relay:
         """
         partes = []
 
-        sessao = entrada.session_id or self.db.sessao_da_conversa(
-            entrada.conversa_id)
-        if sessao:
-            partes.append(
-                f"Voce esta retomando a sessao {sessao} desta conversa. "
-                f"O contexto anterior esta nela — nao comece do zero."
-            )
+        # NAO anunciar a retomada no prompt.
+        #
+        # O `--resume` ja devolve o historico inteiro da sessao. Injetar
+        # "voce esta retomando a sessao X" gravava o aviso DENTRO da
+        # propria sessao X, que e a que esta sendo escrita: cada mensagem
+        # acrescentava mais uma copia do aviso ao contexto que ela mesma
+        # manda reler.
+        #
+        # Medido em 2026-10-03: a sessao 20261003_131416_57f90a chegou a
+        # 66 mensagens, quase todas o mesmo cabecalho, e o agente passou a
+        # responder "ja li a sessao X duas vezes — ela so repete esse
+        # cabecalho". O aviso era redundante: `--resume` faz o trabalho.
+        #
+        # A informacao util — o que fazer agora — vem do bloco de tarefas
+        # abaixo, que traz objetivo, proxima acao e checkpoint.
 
-        tarefas = self.db.tarefas_ativas(entrada.conversa_id)
+        # Uma tarefa so entra no prompt se houver trabalho de verdade.
+        #
+        # `bloqueada` com a etapa "Resultado salvo" nao e trabalho a
+        # retomar: o resultado gravado era o log do comando (bug da outbox,
+        # corrigido em 3cb6888), nao a saida do agente. Anunciar isso como
+        # "tarefa em andamento" fazia o agente procurar execucao que nao
+        # existe e responder que nao tinha nada para retomar.
+        tarefas = [
+            t for t in self.db.tarefas_ativas(entrada.conversa_id)
+            if t.get("status") in ("ativa", "pendente")
+            or t.get("checkpoint")
+        ]
         if tarefas:
             resumo = []
             for t in tarefas[:3]:

@@ -449,10 +449,15 @@ def testar_worker():
     checar("processou com sucesso", r.ok, r.erro[:80])
     checar("Hermes rodou 1 vez", hf.responder_vezes == 1, str(hf.responder_vezes))
     checar("retomou a sessao da conversa",
-           hf.entradas[0]["session_id"] == "20261002_100000_aaaaaa",
-           str(hf.entradas[0]["session_id"]))
-    checar("contexto diz para retomar a sessao",
-           "20261002_100000_aaaaaa" in hf.entradas[0]["contexto"],
+               hf.entradas[0]["session_id"] == "20261002_100000_aaaaaa",
+               str(hf.entradas[0]["session_id"]))
+    # O id da sessao NAO vai no prompt: `--resume` ja devolve o historico.
+    # Anunciar a retomada gravava o aviso dentro da propria sessao que
+    # esta sendo escrita — a sessao 20261003_131416_57f90a chegou a 66
+    # mensagens por causa disso. Ver testes/test_retomada.py.
+    checar("contexto nao anuncia a retomada",
+           "20261002_100000_aaaaaa" not in hf.entradas[0]["contexto"]
+           and "retomando" not in hf.entradas[0]["contexto"].lower(),
            hf.entradas[0]["contexto"][:60])
     checar("resposta enviada", len(evf.enviados) == 1)
 
