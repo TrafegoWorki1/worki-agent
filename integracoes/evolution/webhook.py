@@ -60,8 +60,9 @@ from integracoes.config import Config, digitos  # noqa: E402
 
 log = logging.getLogger("worki.receptor")
 
-# A Evolution manda MESSAGES_UPSERT. Nome pode chegar com o prefixo da
-# instancia: "evolution_api.MESSAGES_UPSERT".
+# Apos a normalizacao em normalizar(), o nome chega sempre aqui como
+# MESSAGES_UPSERT, venha ele de "MESSAGES_UPSERT", "messages.upsert" ou
+# "evolution_api.messages.upsert".
 TIPOS_ACEITOS = ("MESSAGES_UPSERT",)
 
 
@@ -116,7 +117,32 @@ def normalizar(evento: dict, instancia_padrao: str) -> Evento | None:
     key = _dict(dados.get("key"))
 
     # --- tipo do evento ---
-    nome = (evento.get("event") or evento.get("eventType") or "").split(".")[-1]
+    #
+    # A Evolution usa o mesmo nome em tres formatos:
+    #   MESSAGES_UPSERT          (caixa alta, versoes antigas)
+    #   messages.upsert          (2.3.x, minusculo com ponto)
+    #   evolution_api.messages.upsert  (com prefixo de namespace)
+    #
+    # A Evolution usa o mesmo evento em tres formatos:
+    #   MESSAGES_UPSERT               caixa alta, versoes antigas
+    #   messages.upsert               2.3.x, minusculo com ponto
+    #   evolution_api.messages.upsert com prefixo de namespace
+    #
+    # Dois formatos de ponto existem: o namespace (ponto + nome) e o
+    # separador do proprio evento (messages.upsert). Por isso o ponto
+    # vira "_" e o namespace e cortado depois.
+    #
+    # Antes disso, o codigo pegava so o texto depois do ponto:
+    #   "MESSAGES_UPSERT"   -> "MESSAGES_UPSERT"  (so por sorte passava)
+    #   "messages.upsert"   -> "upsert"            (descartava a mensagem)
+    #
+    # Toda mensagem da 2.3.7 era ignorada aqui, antes mesmo de ler o
+    # texto: a Evolution entregava com 200 e nada era processado.
+    bruto = str(evento.get("event") or evento.get("eventType") or "").strip()
+    nome = bruto.replace("-", "_").replace(".", "_").upper()
+    if "_" in nome and not nome.startswith("MESSAGES_"):
+        # Namespace antes do nome: evolution_api_messages_upsert
+        nome = "MESSAGES_UPSERT" if nome.endswith("MESSAGES_UPSERT") else nome
     if nome and nome not in TIPOS_ACEITOS:
         return None
 
