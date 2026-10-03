@@ -112,8 +112,8 @@ RUN set -eux; \
       > /etc/apt/sources.list.d/github-cli.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends gh; \
-    npm install -g @vercel/cli; \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/*; \
+    npm install -g vercel; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /root/.npm; \
     gh --version; \
     vercel --version
 
