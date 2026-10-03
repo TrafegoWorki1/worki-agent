@@ -17,10 +17,36 @@
 
 set -eu
 
+log() { echo "[entrypoint] $*"; }
+
+
+# --- segredos de terceiros em arquivo no volume ---
+#
+# GITHUB_TOKEN e VERCEL_TOKEN nao podem viver no env do servico. Em
+# 2026-10-03, com eles cadastrados via `docker service update`, o proximo
+# deploy sobrescreveu e os dois sumiram do swarm sem erro: a CLI nao autentica
+# e o agente responde "sem CLI do Supabase" sem explicar o motivo.
+#
+# A API publica do EasyPanel expoe MCP e deploy, nao edicao de env. E editar
+# o LMDB de /etc/easypanel/data com o painel segurando o lock e arriscado.
+#
+# Entao os tokens ficam em arquivo no volume /opt/data, que o EasyPanel nao
+# reescreve: este arquivo sobrevive a todo deploy. O volume ja guarda a
+# autenticacao do Hermes (auth.json) pelo mesmo motivo.
+#
+# Formato: KEY=VALOR, uma por linha, mesmo formato de .env. Ausente ou vazio
+# = o agente simplesmente nao tem acesso those servicos; o boot nao falha.
+[ -f /opt/data/env.secrets ] && {
+    log "carregando segredos de terceiros de /opt/data/env.secrets"
+    set -a
+    # shellcheck disable=SC1091
+    . /opt/data/env.secrets
+    set +a
+}
+
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 export LOG_LEVEL
 
-log() { echo "[entrypoint] $*"; }
 
 # `python3` e o nome em que a imagem base do Hermes nao tem: o venv que ela
 # cria em /opt/hermes/.venv expoe `python`, e o PATH da imagem pode nao ter
