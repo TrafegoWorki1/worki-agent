@@ -204,3 +204,44 @@ Medido nas últimas 20 mensagens (antes de `WORKI_RECOVERY_POLL_SECONDS` ir de
 - `README.md` ainda descreve o canal antigo (Edge Function) como o ativo.
 - O `HEALTHCHECK` do Dockerfile só confere `/health` (processo vivo); `/ready`
   (Supabase e worker) é o que diz se o agente está pronto.
+
+---
+
+## 6. Qualidade e formato das respostas no WhatsApp
+
+Observado nas capturas de tela de 2026-10-03 (conversa real com o agente).
+
+### Corrigido neste patch (verificado)
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| Parágrafos encostados, sem linha em branco | `adapter._limpar` apagava **todas** as linhas vazias (o padrão de ruído tinha `\s*$`) | Só o ruído de terminal é removido; parágrafos preservados, 3+ quebras viram 2 |
+| "Parede de texto" cortada pelo "Ler mais" | A resposta inteira ia numa mensagem só | `evolution/formato.py` divide em limite de parágrafo (`WORKI_WHATSAPP_MAX_CHARS`, padrão 1500; 0 desliga) |
+| Markdown cru (`**x**`, `# Título`, `- item`) | O modelo escreve Markdown de terminal | Convertido para o dialeto do WhatsApp (`*x*`, `*Título*`, `• item`); blocos de código ficam intactos |
+| Prompt para copiar misturado no meio da resposta | Sem instrução de formato | O contexto de cada pedido e o `AGENTS.md` §9 passam a pedir: parágrafos curtos, texto para copiar num bloco próprio |
+
+O reconciliador compara com o texto **já formatado**. Sem isso, `**negrito**`
+virava `*negrito*` no WhatsApp, o prefixo não batia e a resposta era reenviada
+em duplicata (teste que falha no comportamento antigo).
+
+### NÃO corrigido: texto estragado dentro das frases
+
+Exemplos reais: `uma限制 real`, `em英文 mesmo`, `sem保护和 sem publicado`,
+`desenharowнedcharacter`, `é Fresh`. Isso **não é código nosso**: são tokens de
+outros idiomas que o modelo emite no meio do português. Apagar os caracteres
+mudaria o sentido (`uma限制 real` não vira uma frase boa), então o worker **só
+registra um alerta** (`WARNING ... caracteres de outro idioma (CJK)`) para medir
+a frequência. A instrução de "somente português do Brasil" foi adicionada ao
+contexto, mas instrução não resolve mistura de tokens.
+
+O que investigar (precisa de acesso ao `/opt/data/config.yaml` do Hermes):
+
+1. **Qual modelo e provedor estão configurados.** Mistura de ideogramas chineses
+   no meio de português é típica de certos modelos; trocar por um com português
+   mais forte costuma resolver mais do que qualquer instrução.
+2. **Temperatura.** Valores altos aumentam a chance de tokens fora do idioma.
+3. **Quantos alertas aparecem** no log do serviço (`worki.worker`) numa semana.
+
+Também visto nas capturas, e **não verificado**: duas frases coladas sem quebra
+("flat shading**Se** quiser variar"). A limpeza antiga não explica esse caso (ela
+mantinha a quebra entre linhas não vazias); pode ser do próprio modelo.

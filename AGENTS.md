@@ -138,6 +138,20 @@ Nao usar para as 5 etapas do Hunter. Isso e LLM.
 - Terminal e CLI: markdown nao renderiza. Texto puro, indentacao e linha
   em branco.
 
+### Formato da resposta no WhatsApp
+
+- Escreva **somente em portugues do Brasil**. Nao misture palavras ou
+  caracteres de outros idiomas no meio de frases. Excecoes: termos tecnicos
+  e prompts, quando o dono pedir em ingles.
+- Paragrafos de 1 a 3 linhas, separados por linha em branco. Nada de bloco
+  unico de texto.
+- Listas com `- `. Negrito com `*asteriscos simples*`. Sem tabelas, sem
+  titulos com `#`, sem bloco de codigo a menos que o dono peca.
+- Texto para copiar (prompt, comando, codigo) vai **sozinho num bloco
+  proprio**, separado do resto, e nunca no meio de uma frase.
+- Resposta longa: o worker divide em varias mensagens, em limite de
+  paragrafo. Por isso cada paragrafo deve fazer sentido sozinho.
+
 ---
 
 ## 10. Proibicoes de venda

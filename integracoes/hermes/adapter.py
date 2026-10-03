@@ -58,9 +58,13 @@ _LOCK = threading.Lock()
 
 # O banner e a linha de "restored workspace dir" vao para stderr, mas
 # nao confie: em versao futura podem ir para stdout e acabar no WhatsApp.
-_RUIDO = re.compile(
-    r"^(↪|↻|│|╭|╰|─|\s*$)", re.MULTILINE
-)
+#
+# NAO inclua linha em branco aqui. Uma versao anterior tinha `\s*$` neste
+# padrao, e `_limpar` apagava TODAS as linhas vazias da resposta: os
+# paragrafos chegavam ao WhatsApp encostados, numa parede de texto. Linha em
+# branco e estrutura do texto, nao ruido de terminal.
+_RUIDO = re.compile(r"^(↪|↻|│|╭|╰|─)")
+_VARIAS_VAZIAS = re.compile(r"\n{3,}")
 
 
 def hermes_home() -> Path:
@@ -147,8 +151,9 @@ def _limpar(texto: str) -> str:
     # O one-shot imprime a resposta final crua; qualquer linha de
     # progresso vem com marcador. Remove so essas, nunca uma palavra
     # do meio de um paragrafo.
-    linhas = [ln for ln in texto.splitlines() if not _RUIDO.match(ln)]
-    return "\n".join(linhas).strip()
+    linhas = [ln.rstrip() for ln in texto.splitlines() if not _RUIDO.match(ln)]
+    # Preserva os paragrafos, mas nao deixa 3+ quebras seguidas.
+    return _VARIAS_VAZIAS.sub("\n\n", "\n".join(linhas)).strip()
 
 
 class Adaptador:

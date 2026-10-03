@@ -61,6 +61,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from integracoes.config import Config  # noqa: E402
 from integracoes.evolution import cliente as ev  # noqa: E402
+from integracoes.evolution import formato  # noqa: E402
 from integracoes.hermes.adapter import Adaptador  # noqa: E402
 from integracoes.supabase import queue as db  # noqa: E402
 
@@ -242,6 +243,17 @@ class Relay:
             "(merge, producao, anuncio, gasto), pare e peça: nao "
             "prometa que vai fazer depois."
         )
+        partes.append(
+            "Formato da resposta (vai para o WhatsApp): escreva SOMENTE em "
+            "portugues do Brasil, sem misturar palavras ou caracteres de "
+            "outros idiomas no meio das frases (so termos tecnicos, e "
+            "prompts quando o dono pedir em ingles). Organize em paragrafos "
+            "de 1 a 3 linhas separados por linha em branco. Listas com "
+            "'- '. Negrito com *asteriscos simples*. Sem tabelas, sem "
+            "titulos com '#', sem blocos de codigo a menos que o dono peça. "
+            "Texto para copiar (prompt, comando, codigo) vai sozinho num "
+            "bloco proprio, separado do resto, nunca no meio de uma frase."
+        )
         return "\n\n".join(partes)
 
     # ------------------------------------------------------------------
@@ -370,6 +382,12 @@ class Relay:
                                      r.session_id or entrada.session_id)
                 self.falhas += 1
                 return Resultado(False, None, r.session_id, r.log)
+
+            if r.texto and formato.tem_caracteres_cjk(r.texto):
+                # Nao altera a resposta (apagar o trecho mudaria o sentido);
+                # so deixa rastro para medir a frequencia da mistura de idioma.
+                log.warning("resposta da entrada %s tem caracteres de outro "
+                            "idioma (CJK); revisar modelo/temperatura", entrada.id)
 
             if not r.texto or not r.texto.strip():
                 self._concluir_falha(entrada, "resposta vazia",
