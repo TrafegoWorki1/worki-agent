@@ -64,6 +64,21 @@ O que **nao** exige aprovacao (pode fazer direto):
 - responder pergunta do grupo
 - gerar relatorio
 
+**Com a Zernio (Google Meu Negocio, Instagram, Facebook Ads), tambem exigem
+`confirma`:**
+- publicar post, story, reel ou atualizacao em qualquer conta
+- responder avaliacao, comentario ou mensagem de cliente em nome da marca
+- criar repositorio no GitHub
+
+Campanha, orcamento, pausa e gasto em anuncio ja estao na tabela acima.
+
+> **Atencao:** as seis acoes da tabela tem trava no banco (a RPC
+> `worki_aprovar_acao` so aceita a palavra certa). Publicar, responder e criar
+> repositorio **ainda nao tem**: hoje dependem de o agente obedecer esta regra.
+> Chamada direta ao MCP da Zernio tambem nao passa pela trava. Ate isso virar
+> codigo, ficar em leitura e pedir `confirma` por escrito antes de qualquer
+> escrita.
+
 ---
 
 ## 4. Dominio
@@ -81,8 +96,36 @@ Decisao explicita em 2026-10-02.
 - Segredo **nunca** vai para o repositorio. Nem em commit, nem em PR, nem em log.
 - `.env` e local, com gitignore. `.env.example` vai para o repo, so com nomes.
 - Ao escrever um segredo em log ou resposta: mascarar, mostrar so o inicio e o fim.
-- Token do GitHub: escopo minimo. Um repo so.
+- Token do GitHub: so os repositorios do Herickson em `TrafegoWorki1`. Nunca
+  usar para outra organizacao ou conta.
 - Zernio: comeca em **leitura**. Somente leitura liberada ate o Herickson pedir mais.
+- Se um token falhar (401, 403, expirado, ausente): **pare e avise o Herickson**.
+  Nao procure outro token, outra conta nem outro caminho para contornar.
+
+### 5.1 Ferramentas e acessos
+
+O ambiente ja tem estas ferramentas e variaveis. Elas existem para o agente
+usar; o que ele pode fazer com cada uma esta abaixo e na secao 3.
+
+| Ferramenta | Variaveis | O que pode |
+|---|---|---|
+| GitHub (`gh`, `git`) | `GITHUB_TOKEN` | Ler e editar arquivos, criar branch, subir branch, abrir PR. Criar repositorio novo: **somente privado e somente com `confirma`**. |
+| Vercel (`vercel`) | `VERCEL_TOKEN`, `VERCEL_ORG_ID` | Criar projeto, vincular e subir **preview**. Producao so com `sobe`. |
+| Zernio | `ZERNIO_API_KEY`, `ZERNIO_MCP_URL` | Ler contas conectadas: Google Meu Negocio, Instagram e conta de anuncios do Facebook. Escrever so conforme a secao 3. |
+
+**Vercel.** O time e `trafegos-projects` (`--scope trafegos-projects`). Nao existe
+`VERCEL_PROJECT_ID` fixo, porque cada app e um projeto: dentro da pasta do app,
+rode `vercel link --yes --project <nome-do-app>`. O `.vercel/` fica fora do
+commit. Nao mexer em projeto que nao foi criado para a tarefa.
+
+**GitHub.** Trabalhar sempre em branch propria, nunca direto na branch
+principal. Merge e do Herickson (`aprova`).
+
+**Nunca, em nenhuma ferramenta:**
+- apagar repositorio, projeto da Vercel ou conta conectada na Zernio;
+- mexer em protecao de branch ou em permissao de repositorio;
+- mexer em dominio (secao 4);
+- imprimir, commitar ou enviar por mensagem o valor de qualquer token.
 
 ---
 
