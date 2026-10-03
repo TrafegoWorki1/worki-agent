@@ -92,6 +92,31 @@ ENV HERMES_HOME=/opt/data \
 # --------------------------------------------------------------------------
 # A imagem oficial roda como `hermes` e `docker exec` cai nesse usuario.
 # O receptor precisa escrever so em /workspace; nao precisa de root.
+# --------------------------------------------------------------------------
+# CLI de terceiros — o agente precisa, nao so as chaves
+# --------------------------------------------------------------------------
+# GITHUB_TOKEN e VERCEL_TOKEN no ambiente nao bastam: sem os binarios o
+# agente responde "sem CLI do Firebase, sem CLI do Supabase" e nao faz
+# nada. Em 2026-10-03 era exatamente esse o estado: os tokens estavam
+# ausentes e o `gh`/`vercel` tambem. As duas metades precisam vir juntas.
+#
+# gh: repositorio publico por padrao, entao o token precisa de escopo de
+# repo. Vercel: token da conta, escopo minimo de producao.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg; \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gh; \
+    npm install -g @vercel/cli; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/*; \
+    gh --version; \
+    vercel --version
+
 USER hermes
 
 # --------------------------------------------------------------------------
