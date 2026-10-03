@@ -67,24 +67,89 @@ from integracoes.supabase import queue as db  # noqa: E402
 log = logging.getLogger("worki.worker")
 
 _PARANDO = threading.Event()
-# Ultimo heartbeat do worker. O /ready le isto: um worker que travou sem
-# morrer deixa de atualizar e o readiness acusa.
+
+# Heartbeat do worker em ARQUIVO, nao em memoria.
+#
+# Receptor e worker sao PROCESSOS SEPARADOS (o entrypoint sobe os dois com &).
+# Um global de modulo so existe dentro de um processo: o `_ULTIMO_TIC` que o
+# worker atualiza nao e o mesmo objeto que o receptor le em `esta_vivo()`.
+# Por isso o /ready ficava em 503 com "worker": false mesmo com o worker
+# vivo e trabalhando — e o sintoma e identico ao de worker morto, o que
+# leva a diagnosticar um servico saudavel como quebrado.
+#
+# O arquivo e o unico canal que os dois processos compartilham. Fica em
+# WORKI_HERMES_HOME, que ja e volume persistente.
+#
+# O global em memoria continua existindo para os testes, que rodam tudo no
+# mesmo processo; o arquivo e apenas o espelho para o caso cross-processo.
 _ULTIMO_TIC = 0.0
 _TIC_LOCK = threading.Lock()
 
 
+def _caminho_tic() -> str:
+    base = os.environ.get("WORKI_HERMES_HOME") or "/opt/data"
+    return os.path.join(base, "worker.heartbeat")
+
+
 def _tic():
+    """Registra o heartbeat, em memoria e em arquivo."""
     global _ULTIMO_TIC
+    agora = time.time()
     with _TIC_LOCK:
-        _ULTIMO_TIC = time.time()
+        _ULTIMO_TIC = agora
+    try:
+        caminho = _caminho_tic()
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        # Escreve e renomeia: o leitor nunca ve um arquivo pela metade.
+        tmp = caminho + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(str(agora))
+        os.replace(tmp, caminho)
+    except OSError as e:
+        log.debug("nao gravei o heartbeat em arquivo: %s", e)
 
 
-def esta_vivo(maxidade_s: int = 90) -> bool:
-    """O worker esta rodando? Usado no /ready."""
+# Janela de 3x o intervalo de poll: tolera dois tics perdidos sem acusar
+# worker morto, e em 3x o poll nao ha atraso relevante entre a morte real
+# e o /ready virar 503. Acusar cedo demais rejeitaria trafego de um worker
+# vivo, que e o erro mais caro dos dois.
+_WORKER_POLL_S = 30
+
+
+def _janela_padrao() -> int:
+    poll = _WORKER_POLL_S
+    try:
+        poll = int(os.environ.get("WORKI_RECOVERY_POLL_SECONDS") or _WORKER_POLL_S)
+    except (TypeError, ValueError):
+        pass
+    # 3x o poll: tolera dois tics perdidos sem acusar worker morto.
+    return max(15, poll * 3)
+
+
+def esta_vivo(maxidade_s: int | None = None) -> bool:
+    """O worker esta rodando? Usado no /ready.
+
+    Le o heartbeat do arquivo (cross-processo) e cai no global em memoria
+    (mesmo processo, caso dos testes).
+    """
+    if maxidade_s is None:
+        maxidade_s = _janela_padrao()
+    agora = time.time()
+
+    caminho = _caminho_tic()
+    try:
+        with open(caminho, "r", encoding="utf-8") as fh:
+            ultimo = float(fh.read().strip())
+        if ultimo > 0 and (agora - ultimo) < maxidade_s:
+            return True
+    except (OSError, ValueError):
+        pass
+
     with _TIC_LOCK:
-        if _ULTIMO_TIC == 0.0:
-            return False
-    return (time.time() - _ULTIMO_TIC) < maxidade_s
+        ultimo_mem = _ULTIMO_TIC
+    if ultimo_mem == 0.0:
+        return False
+    return (agora - ultimo_mem) < maxidade_s
 
 
 @dataclass

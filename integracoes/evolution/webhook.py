@@ -357,10 +357,23 @@ class Receptor:
             estado["supabase"] = False
             estado["erro_supabase"] = str(e)[:200]
         try:
+            # Importar pelo nome do modulo, e NAO executar o arquivo: o
+            # heartbeat vive em `_ULTIMO_TIC`, que e global deste modulo.
+            #
+            # Se o worker subisse por `python -m integracoes.worker.relay`, ele
+            # rodaria sob o nome `__main__` — um objeto de modulo DIFERENTE,
+            # com outro `_ULTIMO_TIC`. O receptor, que importa pelo nome, veria
+            # o valor congelado em 0.0 e reportaria worker morto para sempre,
+            # mesmo com o worker vivo e trabalhando.
+            #
+            # Por isso o entrypoint usa `-c "import ...; main()"` em vez de
+            # `-m`: o processo registra o modulo com o nome canonico, e o
+            # heartbeat passa a ser visivel para o receptor.
             from integracoes.worker import relay
             estado["worker"] = relay.esta_vivo()
-        except Exception:
+        except Exception as e:
             estado["worker"] = False
+            estado["erro_worker"] = str(e)[:200]
 
         ok = estado["supabase"] and estado["worker"]
         # 503 quando nao esta pronto: o EasyPanel usa isso para nao

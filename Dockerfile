@@ -24,13 +24,19 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 # --------------------------------------------------------------------------
-# Codigo do Worki
+# Dependencias Python
 # --------------------------------------------------------------------------
-WORKDIR /app
+# A imagem base traz Python em /opt/hermes/.venv, criado com uv — e uv NAO
+# instala pip nesse venv. Rodar `python -m pip` falha com:
+#   /opt/hermes/.venv/bin/python: No module named pip
+#
+# E o requirements.txt esta vazio de proposito: receptor e worker usam
+# apenas a biblioteca padrao. Nao ha nada a instalar.
+#
+# Para entrar no requisito daqui, use `uv pip install` ou `uv add`, nunca
+# `python -m pip`.
 
-# Primeiro so os requisitos: mudanca em codigo nao reinstala nada.
-COPY requirements.txt /app/requirements.txt
-RUN python -m pip install --no-cache-dir -r /app/requirements.txt
+WORKDIR /app
 
 COPY integracoes/ /app/integracoes/
 COPY docs/ /app/docs/
@@ -59,18 +65,23 @@ ENV HERMES_HOME=/opt/data \
     PORT=8080
 
 # --------------------------------------------------------------------------
-# Ferramentas de que a skill de paginas precisa
+# Ferramentas de pagina
 # --------------------------------------------------------------------------
-# git e gh para branch/PR; node para build da pagina. A imagem oficial
-# documenta `npx`/`uvx` para ferramentas avulsas — instalar no sistema
-# aqui deliberatemente: o build de pagina precisa de node e npm estaveis.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && (command -v node >/dev/null 2>&1 \
-        || (curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-            && apt-get install -y --no-install-recommends nodejs))
-
+# git/node sao necessarios so pela skill de paginas, que builda uma landing.
+# NAO sao requisito do servico: receptor e worker usam apenas a biblioteca
+# padrao do Python (ver requirements.txt — hoje esta vazio de proposito).
+#
+# Este bloco saiu do caminho de build de proposito. Ele trazia duas
+# dependencias de rede frágeis para o build do servico:
+#   - apt-get com repositorio externo
+#   - curl do nodesource, falho por rate limit e por DNS
+# Build de servico nao pode depender de CDN de terceiro. A skill de paginas
+# usa `uvx`/`npx` no container em tempo de execucao, que e o caminho que a
+# propria imagem do Hermes documenta para ferramentas avulsas.
+#
+# Se a skill de paginas precisar de node estavel, instala em runtime com
+# `uvx` ou no entrypoint, e nao no build.
+#
 # --------------------------------------------------------------------------
 # USUARIO
 # --------------------------------------------------------------------------

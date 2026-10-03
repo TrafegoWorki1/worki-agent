@@ -20,10 +20,35 @@ set -eu
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 export LOG_LEVEL
 
-PY="${PYTHON:-python3}"
-APP="${WORKI_APP_DIR:-/app}"
-
 log() { echo "[entrypoint] $*"; }
+
+# `python3` e o nome em que a imagem base do Hermes nao tem: o venv que ela
+# cria em /opt/hermes/.venv expoe `python`, e o PATH da imagem pode nao ter
+# nenhum `python3`. Com `PYTHON:-python3` o boot falha em
+# "python3: not found" e o container nunca sobe — que e o que a revisao
+# do build mostrava como 502 no proxy.
+#
+# A ordem abaixo e deliberada:
+#   1. PYTHON explicito na configuracao do serviço (EasyPanel), se houver
+#   2. /opt/hermes/.venv/bin/python — o Python da propria imagem
+#   3. qualquer `python` no PATH
+#   4. `python3` por ultimo
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+    for candidato in /opt/hermes/.venv/bin/python python python3; do
+        if command -v "$candidato" >/dev/null 2>&1; then
+            PY="$candidato"
+            break
+        fi
+    done
+fi
+if [ -z "$PY" ]; then
+    echo "[entrypoint] CONFIGURACAO INVALIDA: nenhum interpretador Python encontrado" >&2
+    exit 78
+fi
+log "python: $PY ($("$PY" --version 2>&1))"
+
+APP="${WORKI_APP_DIR:-/app}"
 
 # --- validacao de configuracao antes de subir qualquer coisa ---
 # Falhar aqui, no boot, e melhor do que subir e falhar em cada request.
@@ -85,7 +110,13 @@ if ! kill -0 "$RECEPTOR_PID" 2>/dev/null; then
 fi
 
 # --- worker ---
-"$PY" -m integracoes.worker.relay &
+# Nao usar `-m integracoes.worker.relay`: com -m o arquivo roda sob o nome
+# `__main__`, que e um objeto de modulo DIFERENTE de `integracoes.worker.relay`.
+# O heartbeat vive em `_ULTIMO_TIC`, global do modulo. O receptor importa pelo
+# nome canonico e veria o valor congelado em 0.0, reportando worker morto
+# para sempre — foi o que travou o /ready em 503 mesmo com o worker no ar.
+# Importando e chamando main(), o modulo e registrado com o nome certo.
+"$PY" -c "from integracoes.worker import relay; relay.main()" &
 WORKER_PID=$!
 log "worker no ar (pid $WORKER_PID)"
 
@@ -125,7 +156,13 @@ while [ "$SHUTTING_DOWN" -eq 0 ]; do
             kill -TERM "$RECEPTOR_PID" 2>/dev/null || true
             exit 1
         fi
-        "$PY" -m integracoes.worker.relay &
+        # Nao usar `-m integracoes.worker.relay`: com -m o arquivo roda sob o nome
+# `__main__`, que e um objeto de modulo DIFERENTE de `integracoes.worker.relay`.
+# O heartbeat vive em `_ULTIMO_TIC`, global do modulo. O receptor importa pelo
+# nome canonico e veria o valor congelado em 0.0, reportando worker morto
+# para sempre — foi o que travou o /ready em 503 mesmo com o worker no ar.
+# Importando e chamando main(), o modulo e registrado com o nome certo.
+"$PY" -c "from integracoes.worker import relay; relay.main()" &
         WORKER_PID=$!
         log "worker reiniciado (pid $WORKER_PID)"
     else
