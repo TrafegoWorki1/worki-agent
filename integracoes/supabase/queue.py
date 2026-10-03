@@ -220,7 +220,12 @@ def reservar(limite: int = 1, lease_s: int = 120) -> list[Entrada]:
             continue
         e = erows[0]
         mids = urllib.parse.quote(str(e["mensagem_id"]), safe="")
-        msgs = _rest("GET", f"/rest/v1/mensagens?id=eq.{mids}&select=texto,remetente",
+        # A coluna do remetente em `mensagens` chama-se `de`, nao
+        # `remetente`. Pedir `remetente` faz o PostgREST responder 400 e
+        # o worker falhar ANTES de chamar o Hermes: a entrada volta para
+        # a fila e o ciclo se repete. O schema versionado em
+        # supabase/migrations/ usa `de`.
+        msgs = _rest("GET", f"/rest/v1/mensagens?id=eq.{mids}&select=texto,de",
                      prefer="return=representation")
         cid = urllib.parse.quote(str(e["conversa_id"]), safe="")
         convs = _rest("GET", f"/rest/v1/conversas?id=eq.{cid}&select=session_id,chat_jid",
@@ -230,7 +235,7 @@ def reservar(limite: int = 1, lease_s: int = 120) -> list[Entrada]:
         entradas.append(Entrada(id=entrada_id, mensagem_id=str(e["mensagem_id"]),
                                 conversa_id=str(e["conversa_id"]),
                                 session_id=c.get("session_id"), texto=m.get("texto") or "",
-                                de=m.get("remetente") or "", chat_jid=c.get("chat_jid") or "",
+                                de=m.get("de") or "", chat_jid=c.get("chat_jid") or "",
                                 tentativas=int(e.get("tentativas") or 0)))
     return entradas
 
