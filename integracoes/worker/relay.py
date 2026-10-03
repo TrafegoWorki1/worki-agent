@@ -62,6 +62,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from integracoes.config import Config  # noqa: E402
 from integracoes.evolution import cliente as ev  # noqa: E402
 from integracoes.evolution import formato  # noqa: E402
+from integracoes import memoria  # noqa: E402
 from integracoes.hermes.adapter import Adaptador  # noqa: E402
 from integracoes.supabase import queue as db  # noqa: E402
 
@@ -236,6 +237,23 @@ class Relay:
             partes.append(
                 "Tarefas em andamento nesta conversa:\n" + "\n".join(resumo)
             )
+
+        # Memorias de longo prazo do dono. Falha aqui nunca derruba a
+        # resposta: sem memorias, o agente responde como antes.
+        try:
+            dono = memoria.dono_do_prompt(getattr(entrada, "de", ""))
+            if dono and hasattr(self.db, "memorias_ativas"):
+                bloco = memoria.bloco_de_memorias(
+                    self.db.memorias_ativas(dono), dono)
+                if bloco:
+                    partes.append(bloco)
+                mid = getattr(entrada, "mensagem_id", "")
+                if dono and mid:
+                    partes.append(
+                        "Id desta mensagem do dono (use em --fonte ao "
+                        f"guardar uma memoria, AGENTS.md secao 15): {mid}")
+        except Exception as e:  # noqa: BLE001
+            log.warning("memorias indisponiveis, seguindo sem elas: %s", e)
 
         partes.append(
             "Converse em pt-BR. Resposta curta, de conversa humana. "
