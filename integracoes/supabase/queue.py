@@ -275,8 +275,14 @@ def concluir_atomic(entrada_id: str, session_id: str, resposta: str,
 
 def concluir(entrada_id: str, erro: str | None = None,
              session_id: str | None = None,
-             mensagem_usuario: str | None = None) -> None:
+             mensagem_usuario: str | None = None) -> str | None:
     """Conclui uma entrada que falhou. Caminho de erro; o sucesso e atomico.
+
+    Devolve o id da saida criada, ou None quando a falha NAO gerou saida.
+    Quem chama usa isso para saber se a outbox vai entregar o aviso ao
+    usuario: a migration 20261003120000 (outbox so no sucesso) faz a RPC
+    devolver null numa falha, enquanto a versao anterior da RPC cria a saida.
+    O codigo funciona nos dois estados do banco; ver relay._avisar_falha.
 
     Tres garantias, cada uma fechando um bug real:
 
@@ -295,12 +301,15 @@ def concluir(entrada_id: str, erro: str | None = None,
     if erro:
         log.warning("entrada %s concluida com falha: %s",
                     entrada_id, str(erro)[:500])
-    _rpc("worki_concluir_entrada", {
+    valor = _rpc("worki_concluir_entrada", {
         "p_entrada_id": entrada_id, "p_owner": dono(),
         "p_session_id": session_id,
         "p_resposta": mensagem_usuario or MENSAGEM_FALHA_PADRAO,
         "p_sucesso": False,
     })
+    if isinstance(valor, list):
+        valor = valor[0] if valor else None
+    return str(valor) if valor else None
 
 
 def recuperar_leases() -> int:

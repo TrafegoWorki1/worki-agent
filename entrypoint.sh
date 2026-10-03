@@ -197,13 +197,9 @@ while [ "$SHUTTING_DOWN" -eq 0 ]; do
             kill -TERM "$RECEPTOR_PID" 2>/dev/null || true
             exit 1
         fi
-        # Nao usar `-m integracoes.worker.relay`: com -m o arquivo roda sob o nome
-# `__main__`, que e um objeto de modulo DIFERENTE de `integracoes.worker.relay`.
-# O heartbeat vive em `_ULTIMO_TIC`, global do modulo. O receptor importa pelo
-# nome canonico e veria o valor congelado em 0.0, reportando worker morto
-# para sempre — foi o que travou o /ready em 503 mesmo com o worker no ar.
-# Importando e chamando main(), o modulo e registrado com o nome certo.
-"$PY" -c "from integracoes.worker import relay; relay.main()" &
+        # Mesma forma de subir do boot (ver o comentario acima, sobre nao
+        # usar `-m`): importar e chamar main() mantem o heartbeat visivel.
+        "$PY" -c "from integracoes.worker import relay; relay.main()" &
         WORKER_PID=$!
         log "worker reiniciado (pid $WORKER_PID)"
     else
