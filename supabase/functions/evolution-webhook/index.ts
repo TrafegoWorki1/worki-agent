@@ -60,8 +60,34 @@ function checarAllowlist(m) {
   if (m.deMim) return 'nao_autorizado';          // mensagem que eu enviei
   if (!ALLOW) return 'erro_config';                // allowlist nao configurada
   if (m.de !== ALLOW) return 'nao_autorizado';     // so seu numero comanda
-  if (m.grupo && GRUPOS.length > 0 && !GRUPOS.includes(m.grupo)) return 'nao_autorizado';
+  // Grupo: negado por padrao. Antes, `GRUPOS.length > 0 && ...` deixava
+  // PASSAR qualquer grupo quando a lista estava vazia. Lista vazia agora
+  // significa nenhum grupo permitido (AGENTS.md s.2).
+  if (m.grupo && !GRUPOS.includes(m.grupo)) return 'nao_autorizado';
   return 'autorizado';
+}
+
+// Segredo do webhook (WORKI_WEBHOOK_SECRET). Sem isso, qualquer pessoa que
+// conheca a URL da funcao pode forjar um POST com o numero autorizado e
+// enfileirar uma fala que o relay executa no Hermes. A allowlist acima
+// compara um numero que vem DENTRO do JSON, ou seja, controlado por quem
+// envia: ela nao e autenticacao.
+//
+// Quando WORKI_WEBHOOK_SECRET esta definido, o cabecalho X-Webhook-Secret e
+// obrigatorio e precisa bater. Quando nao esta definido, o comportamento
+// antigo e mantido (para nao derrubar o canal de quem ainda nao configurou o
+// cabecalho na Evolution) e o health check avisa `segredo: false`.
+const SEGREDO = Deno.env.get('WORKI_WEBHOOK_SECRET') || '';
+
+/** Comparacao em tempo constante, para nao vazar o segredo por tempo. */
+function segredoConfere(recebido) {
+  if (!SEGREDO) return true;
+  const a = new TextEncoder().encode(String(recebido || ''));
+  const b = new TextEncoder().encode(SEGREDO);
+  let diff = a.length ^ b.length;
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  return diff === 0;
 }
 
 /** Grava auditoria. Nunca lanca: falha aqui nao pode derrubar o canal. */
@@ -164,7 +190,7 @@ Deno.serve(async (req) => {
   const cors = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, apikey, authorization',
+    'Access-Control-Allow-Headers': 'content-type, apikey, authorization, x-webhook-secret',
   };
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
 
@@ -177,12 +203,25 @@ Deno.serve(async (req) => {
         grupos: GRUPOS.length,
         evolution: Boolean(Deno.env.get('EVOLUTION_API_URL')),
         instance: INSTANCE,
+        // false = a funcao aceita POST de qualquer origem. Configure
+        // WORKI_WEBHOOK_SECRET e o cabecalho X-Webhook-Secret na Evolution.
+        segredo: Boolean(SEGREDO),
       },
     }, { headers: cors });
   }
 
   if (req.method !== 'POST') {
     return Response.json({ erro: 'metodo nao permitido' }, { status: 405, headers: cors });
+  }
+
+  // Autenticacao do chamador. 401 aqui e seguro: um POST sem o segredo nao e
+  // a Evolution, entao nao ha entrega legitima para repetir.
+  if (!segredoConfere(req.headers.get('x-webhook-secret'))) {
+    console.error('webhook recusado: segredo ausente ou invalido');
+    return Response.json({ ok: false, erro: 'nao autorizado' }, { status: 401, headers: cors });
+  }
+  if (!SEGREDO) {
+    console.warn('AVISO: WORKI_WEBHOOK_SECRET nao configurado; webhook aceita qualquer origem');
   }
 
   const t0 = Date.now();

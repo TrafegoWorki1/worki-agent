@@ -120,7 +120,10 @@ class Config:
     WORKI_WORKER_CONCURRENCY: int = 1
     WORKI_WORKER_LEASE_S: int = 120
     WORKI_RECOVERY_POLL_SECONDS: int = 3
-    WORKI_TASK_TIMEOUT_SECONDS: int = 1800
+    WORKI_TASK_TIMEOUT_SECONDS: int = 1500
+    # 0 = desligado. >0: se o Hermes ainda nao respondeu depois desse numero
+    # de segundos, o worker manda um "recebi, estou trabalhando" no WhatsApp.
+    WORKI_ACK_AFTER_SECONDS: int = 0
     WORKI_WORKSPACE_DIR: str = "/workspace"
     WORKI_HERMES_HOME: str = "/opt/data"
     WORKI_OWNER_ID: str = "herickson"
@@ -162,7 +165,8 @@ class Config:
         c.WORKI_RECOVERY_POLL_SECONDS = inteiro(
             "WORKI_RECOVERY_POLL_SECONDS", 3)
         c.WORKI_TASK_TIMEOUT_SECONDS = inteiro(
-            "WORKI_TASK_TIMEOUT_SECONDS", 1800)
+            "WORKI_TASK_TIMEOUT_SECONDS", 1500)
+        c.WORKI_ACK_AFTER_SECONDS = inteiro("WORKI_ACK_AFTER_SECONDS", 0)
         c.WORKI_WORKSPACE_DIR = chave("WORKI_WORKSPACE_DIR", "/workspace",
                                       obrigatorio=False)
         c.WORKI_HERMES_HOME = chave("WORKI_HERMES_HOME", "/opt/data",
@@ -198,6 +202,7 @@ class Config:
                 "concurrency": c.WORKI_WORKER_CONCURRENCY,
                 "lease_s": c.WORKI_WORKER_LEASE_S,
                 "task_timeout_s": c.WORKI_TASK_TIMEOUT_SECONDS,
+                "ack_after_s": c.WORKI_ACK_AFTER_SECONDS,
                 "workspace": c.WORKI_WORKSPACE_DIR,
                 "hermes_home": c.WORKI_HERMES_HOME,
                 "dry_run": c.WORKI_DRY_RUN,

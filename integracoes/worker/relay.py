@@ -66,6 +66,10 @@ from integracoes.supabase import queue as db  # noqa: E402
 
 log = logging.getLogger("worki.worker")
 
+# Aviso de andamento (opt-in via WORKI_ACK_AFTER_SECONDS). Curto, neutro e sem
+# promessa de prazo: o objetivo e o usuario saber que a mensagem foi vista.
+MENSAGEM_AVISO = "Recebi. Estou trabalhando nisso, te respondo em seguida."
+
 _PARANDO = threading.Event()
 
 # Heartbeat do worker em ARQUIVO, nao em memoria.
@@ -263,6 +267,61 @@ class Relay:
         return True
 
     # ------------------------------------------------------------------
+    # aviso de andamento
+    # ------------------------------------------------------------------
+
+    def _agendar_aviso(self, entrada):
+        """Agenda um "recebi" se o Hermes demorar. Devolve (timer, terminou).
+
+        Desligado por padrao (WORKI_ACK_AFTER_SECONDS=0). Tarefas de minutos
+        sem nenhum sinal fazem o usuario achar que travou; o aviso so sai se
+        o Hermes ainda nao respondeu depois do prazo, entao resposta rapida
+        nao gera mensagem a mais. E melhor esforco: falha no envio e ignorada
+        e nunca afeta a tarefa. Fora da outbox de proposito: nao e resposta,
+        e repeti-lo numa retentativa e inofensivo.
+
+        `terminou` fecha a janela em que o timer dispara no mesmo instante em
+        que a resposta fica pronta: o aviso nunca sai depois da resposta.
+        """
+        espera = getattr(self.cfg, "WORKI_ACK_AFTER_SECONDS", 0) or 0
+        if espera <= 0 or not entrada.chat_jid:
+            return None, None
+        terminou = threading.Event()
+
+        def enviar():
+            if terminou.is_set():
+                return
+            try:
+                self.ev.enviar_texto(entrada.chat_jid, MENSAGEM_AVISO)
+            except Exception as e:
+                log.warning("aviso de andamento nao enviado: %s", e)
+
+        timer = threading.Timer(espera, enviar)
+        timer.daemon = True
+        timer.start()
+        return timer, terminou
+
+    def _concluir_falha(self, entrada, erro, session_id=None):
+        """Conclui a entrada como falha e garante que o usuario saiba.
+
+        O banco pode estar em dois estados (ver queue.concluir): a RPC cria uma
+        saida com o aviso (a outbox entrega), ou nao cria nenhuma (migration
+        20261003120000: outbox so no sucesso). No segundo caso o usuario ficaria
+        sem resposta nenhuma, a "falha silenciosa" que o AGENTS.md s.2 proibe,
+        entao o worker manda o aviso direto. Nunca nos dois: se a RPC criou a
+        saida, quem entrega e a outbox.
+
+        Melhor esforco: falha no aviso nao muda o desfecho da entrada.
+        """
+        saida = self.db.concluir(entrada.id, erro, session_id=session_id)
+        if saida or not entrada.chat_jid:
+            return
+        try:
+            self.ev.enviar_texto(entrada.chat_jid, db.MENSAGEM_FALHA_PADRAO)
+        except Exception as e:
+            log.warning("aviso de falha nao enviado: %s", e)
+
+    # ------------------------------------------------------------------
     # uma entrada
     # ------------------------------------------------------------------
 
@@ -287,11 +346,17 @@ class Relay:
                     entrada.conversa_id, entrada.id, entrada.texto[:300])
 
             # 3. Hermes. `--resume` so com id desta conversa.
-            r = self.hermes.responder(
-                entrada.texto,
-                session_id=entrada.session_id,
-                contexto=contexto,
-            )
+            aviso, terminou = self._agendar_aviso(entrada)
+            try:
+                r = self.hermes.responder(
+                    entrada.texto,
+                    session_id=entrada.session_id,
+                    contexto=contexto,
+                )
+            finally:
+                if aviso:
+                    terminou.set()
+                    aviso.cancel()
 
             if parar.is_set():
                 return Resultado(False, None, entrada.session_id,
@@ -301,14 +366,14 @@ class Relay:
                 # Preserva a sessao (r.session_id, ou a que a conversa ja
                 # tinha) para o --resume da proxima mensagem continuar o
                 # contexto. O log tecnico fica no servidor, nao no WhatsApp.
-                self.db.concluir(entrada.id, r.log or "hermes falhou",
-                                 session_id=r.session_id or entrada.session_id)
+                self._concluir_falha(entrada, r.log or "hermes falhou",
+                                     r.session_id or entrada.session_id)
                 self.falhas += 1
                 return Resultado(False, None, r.session_id, r.log)
 
             if not r.texto or not r.texto.strip():
-                self.db.concluir(entrada.id, "resposta vazia",
-                                 session_id=r.session_id or entrada.session_id)
+                self._concluir_falha(entrada, "resposta vazia",
+                                     r.session_id or entrada.session_id)
                 return Resultado(False, None, r.session_id, "resposta vazia")
 
             # sessao gravada antes de qualquer outra coisa: e o que faz a
@@ -378,7 +443,7 @@ class Relay:
             try:
                 if tarefa_id:
                     self.db.cancelar_tarefa(tarefa_id, str(e)[:300])
-                self.db.concluir(entrada.id, str(e))
+                self._concluir_falha(entrada, str(e))
             except Exception:
                 pass
             return Resultado(False, None, entrada.session_id, str(e))

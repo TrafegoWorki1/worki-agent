@@ -11,6 +11,21 @@ Python **foi testada** (ver secao "O que foi testado").
 
 ---
 
+## Estado atual (2026-10-03)
+
+- Merge em `feat/fila-sessoes-outbox`: `7cd20e7`. Container reimplantado com o
+  boot oficial (`entrypoint-dispatch.sh` + `worki-entrypoint`), saudavel no
+  healthcheck do Docker.
+- Migracao `20261003190000_falha_nao_trava_conversa.sql` aplicada na mao no SQL
+  Editor do Supabase (por isso nao consta na lista de migracoes do projeto).
+- `WORKI_RECOVERY_POLL_SECONDS=3` e `WORKI_TASK_TIMEOUT_SECONDS=1500` no servico.
+- **Ainda sem confirmacao:** o teste de fumaca abaixo (skills sincronizadas,
+  `/ready`, `ping` -> `pong`). O healthcheck do Docker so prova que o processo
+  responde.
+- Achados em aberto e recomendacoes: `docs/recomendacoes-pendentes.md`.
+
+---
+
 ## O problema
 
 O `Dockerfile` sobrescrevia o `ENTRYPOINT` da imagem oficial do Hermes pelo
