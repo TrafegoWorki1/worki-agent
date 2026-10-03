@@ -96,12 +96,27 @@ if [ ! -d /opt/data ]; then
 fi
 mkdir -p "$APP" 2>/dev/null || true
 
-# --- diretorio de trabalho do agente ---
-# O Hermes espera um git repo no cwd para o AGENTS.md ser lido. Sem isso
-# ele roda sem as regras do repo.
-if [ ! -d /workspace/.git ]; then
-    log "/workspace nao e um repo git. Copie o codigo do agente para la"
-    log "ou monte um volume com o repo. O AGENTS.md so e lido em repo."
+# --- regras do agente (AGENTS.md) no diretorio de trabalho ---
+# O worker roda `hermes chat` com cwd=/workspace (WORKI_WORKSPACE_DIR), e o
+# Hermes le o AGENTS.md do cwd MESMO SEM repo git (confirmado em
+# agent/prompt_builder.py::_agents_md_directory_chain: sem git root, ele
+# verifica o proprio cwd). Nao e preciso `git init`.
+#
+# Mas /workspace e um VOLUME persistente: o `COPY AGENTS.md /workspace/` do
+# Dockerfile so popula o volume na primeira criacao. Numa atualizacao da
+# imagem, o volume ja existe e a copia e ignorada — as regras ficariam
+# congeladas numa versao antiga. Por isso refrescamos a cada boot a partir
+# da copia que o build grava em /app/AGENTS.md (essa sim sempre atual).
+WS="${WORKI_WORKSPACE_DIR:-/workspace}"
+if [ -f /app/AGENTS.md ]; then
+    mkdir -p "$WS" 2>/dev/null || true
+    if cp -f /app/AGENTS.md "$WS/AGENTS.md" 2>/dev/null; then
+        log "AGENTS.md atualizado em $WS a partir da imagem"
+    else
+        log "AVISO: nao consegui atualizar $WS/AGENTS.md; as regras podem estar desatualizadas"
+    fi
+else
+    log "AVISO: /app/AGENTS.md ausente; o agente roda sem as regras do repo"
 fi
 
 RECEPTOR_PID=""

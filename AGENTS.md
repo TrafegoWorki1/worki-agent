@@ -168,3 +168,62 @@ Se o lead der dia e hora para a call: **parar e avisar o Herickson.**
 | `TrafegoWorki1/worki-agent` | este — skills e automacoes |
 | `TrafegoWorki1/worki-performance-hub` | pagina de captacao (Vite+React) |
 | `WorkiDigital/servidor-api` | backend existente, candidato a hospedar o webhook |
+
+---
+
+## 13. Politica de conclusao e persistencia
+
+**Hierarquia (le isto primeiro).** Persistir nunca autoriza contornar as
+secoes 3 a 6 (aprovacao humana, dominio, segredos, teto de gasto). Um bloqueio
+de permissao, de aprovacao ou de politica NAO e um erro a resolver com outra
+abordagem: e uma parada. Procurar um atalho em volta de uma trava e violacao,
+nao persistencia.
+
+Esta secao vale para tarefas de implementacao, correcao, diagnostico,
+instalacao, configuracao, deploy ou integracao. Pergunta ou conversa rapida no
+WhatsApp nao e tarefa e nao exige este ritual (ver secao 14).
+
+1. Nao encerre a tarefa apos a primeira tentativa que falhar.
+2. Identifique a causa concreta do erro.
+3. Tente abordagens alternativas seguras, dentro das secoes 3 a 6.
+4. Depois de cada alteracao, execute uma verificacao objetiva.
+5. Nao declare conclusao com base apenas em leitura de codigo ou suposicao.
+6. Considere a tarefa concluida somente quando existir evidencia verificavel,
+   como teste aprovado, build concluido, health check valido, URL acessivel,
+   log correto ou comportamento reproduzido.
+7. Se um processo demorado estiver em execucao, acompanhe-o ate terminar.
+8. Registre o andamento no checkpoint da tarefa ou no log do servidor, nunca
+   despejando tudo no WhatsApp. No WhatsApp vai so um resumo curto. O registro
+   contem:
+   - objetivo;
+   - acoes realizadas;
+   - erros encontrados;
+   - tentativas feitas;
+   - resultado das verificacoes;
+   - proxima acao.
+9. Limite de esforco antes de pedir ajuda: no maximo 3 abordagens diferentes
+   ou cerca de 15 minutos de relogio. Passando disso, pare e reporte, mesmo
+   sem bloqueio formal. Nao entre em loop de tentativa gastando recurso.
+10. Pare e peca ajuda quando houver bloqueio real:
+    - credencial ausente;
+    - autorizacao humana necessaria (secao 3);
+    - decisao de produto nao especificada;
+    - acao destrutiva nao autorizada;
+    - servico externo indisponivel apos tentativas razoaveis.
+11. Quando estiver bloqueado, informe exatamente:
+    - o que bloqueou;
+    - o que ja foi tentado;
+    - qual informacao ou acao humana e necessaria;
+    - como continuar depois da liberacao.
+
+## 14. Contrato padrao de conclusao
+
+Toda **tarefa** (nao conversa) deve possuir:
+
+- Outcome: estado final que precisa ser alcancado.
+- Verification: comando, teste ou evidencia que comprova a conclusao.
+- Constraints: o que nao pode ser quebrado (as secoes 3 a 6 entram sempre aqui).
+- Boundaries: arquivos, servicos e projetos permitidos.
+- Stop when: situacoes em que deve parar e pedir intervencao.
+
+Uma explicacao, plano ou diagnostico nao equivale a implementacao concluida.

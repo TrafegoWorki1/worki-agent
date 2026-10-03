@@ -117,15 +117,30 @@ RUN set -eux; \
     gh --version; \
     vercel --version
 
-USER hermes
+# NAO fixar `USER hermes` aqui.
+#
+# A imagem oficial do Hermes sobe como root e so entao rebaixa o privilegio
+# sozinha: o ENTRYPOINT dela (entrypoint-dispatch.sh) roda o /init do
+# s6-overlay, que executa o stage2-hook como root (remap de UID, chown dos
+# volumes, seed da config e SINCRONIZACAO DAS SKILLS) e, por fim, roda o CMD
+# ja como `hermes` via main-wrapper. Se fixassemos `USER hermes`, o container
+# comecaria como hermes, o stage2 nao teria root para preparar nada, e o
+# Hermes subiria sem skills nem config seedada — que era o estado anterior.
 
 # --------------------------------------------------------------------------
-# ENTRYPOINT
+# ENTRYPOINT / CMD
 # --------------------------------------------------------------------------
-# Dois processos sob supervisao. Nao e `&` solto: o blueprint pede que a
-# falha de um apareca. Aqui o receptor e o worker sao gerenteados por um
-# supervisor Python que reinicia e mantem log e codigo de saida — e o
-# s6 nativo da imagem continua cuidando do `gateway run` da propria imagem.
+# NAO sobrescrevemos o ENTRYPOINT. Herdamos o da imagem oficial
+# (/opt/hermes/docker/entrypoint-dispatch.sh), que sobe o Hermes COMPLETO:
+# s6-overlay, stage2 (skills sync + config), e deixa o gateway supervisionado.
+#
+# O worki-entrypoint entra como CMD, ou seja, como "programa principal" que o
+# main-wrapper roda DEPOIS do stage2 e ja rebaixado para `hermes`. Ele cuida
+# so do receptor HTTP e do worker (o par que fala com a Evolution). Assim o
+# `hermes chat` que o worker chama ja tem skills, config e ferramentas.
+#
+# Antes, o ENTRYPOINT era sobrescrito pelo worki-entrypoint: o /init nunca
+# rodava, o stage2 nunca sincronizava skills e o Hermes subia pela metade.
 EXPOSE 8080
 
 # Health: liveness barato. O EasyPanel usa /ready para nao mandar trafego
@@ -135,4 +150,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request,sys; \
 sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=4).status==200 else 1)"
 
-ENTRYPOINT ["/usr/local/bin/worki-entrypoint"]
+CMD ["/usr/local/bin/worki-entrypoint"]
