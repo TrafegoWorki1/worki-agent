@@ -1,0 +1,124 @@
+{
+  "project_ref": "wxqwtyotkkshdjzzwjsk",
+  "schema": "public",
+  "version": 1,
+  "functions": [
+    {
+      "proname": "worki_aprovar_acao",
+      "argumentos": "p_conversa_id uuid, p_palavra text, p_aprovador text, p_acao_id bigint DEFAULT NULL::bigint",
+      "retorno": "bigint",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_checkpoint_tarefa",
+      "argumentos": "p_tarefa_id uuid, p_owner text, p_etapa text, p_proxima_acao text, p_checkpoint jsonb",
+      "retorno": "boolean",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_concluir_entrada",
+      "argumentos": "p_entrada_id uuid, p_owner text, p_session_id text, p_resposta text, p_sucesso boolean DEFAULT true",
+      "retorno": "uuid",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_consumir_aprovacao",
+      "argumentos": "p_acao_id bigint, p_conversa_id uuid, p_acao text, p_alvo text, p_payload_hash text",
+      "retorno": "boolean",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_iniciar_entrada",
+      "argumentos": "p_entrada_id uuid, p_owner text",
+      "retorno": "uuid",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_pedir_aprovacao",
+      "argumentos": "p_conversa_id uuid, p_acao text, p_alvo text, p_payload_hash text, p_descricao text, p_payload jsonb, p_tarefa_id uuid DEFAULT NULL::uuid",
+      "retorno": "bigint",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_recuperar_leases",
+      "argumentos": "",
+      "retorno": "jsonb",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_registrar_envio",
+      "argumentos": "p_saida_id uuid, p_owner text, p_estado text, p_provider_message_id text DEFAULT NULL::text",
+      "retorno": "boolean",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_registrar_evento",
+      "argumentos": "p_instancia text, p_chat_jid text, p_remetente text, p_provider_message_id text, p_texto text, p_tipo text DEFAULT 'conversation'::text",
+      "retorno": "TABLE(entrada_id uuid, mensagem_id uuid, conversa_id uuid, duplicado boolean)",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_renovar_lease",
+      "argumentos": "p_entrada_id uuid, p_owner text, p_lease_s integer DEFAULT 120",
+      "retorno": "boolean",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_reservar_entrada",
+      "argumentos": "p_owner text, p_lease_s integer DEFAULT 120",
+      "retorno": "SETOF entradas",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_reservar_saida",
+      "argumentos": "p_owner text, p_lease_s integer DEFAULT 120",
+      "retorno": "SETOF saidas",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    },
+    {
+      "proname": "worki_salvar_memoria",
+      "argumentos": "p_proprietario text, p_projeto text, p_chave text, p_valor text, p_tipo text, p_fonte text, p_confirmada boolean DEFAULT false",
+      "retorno": "uuid",
+      "security_definer": false,
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "backend_execute": true
+    }
+  ]
+}

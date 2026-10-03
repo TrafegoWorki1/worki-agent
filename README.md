@@ -67,12 +67,16 @@ WhatsApp (chip 558586661513)
     │ Evolution envia MESSAGES_UPSERT
     ▼
 Supabase Edge Function: evolution-webhook
-    │ 1. valida allowlist (so 5585999515154 comanda)
+    │ 1. valida allowlist (so 558592494552 comanda)
     │ 2. grava em auditoria
     │ 3. se autorizado, responde via sendText
     ▼
 Evolution API ──► WhatsApp
 ```
+
+Numero autorizado: `558592494552` (WhatsApp). O `5585999515154` e o
+Telegram e NAO deve entrar na allowlist do WhatsApp — nao passa pelo
+webhook da Evolution. Ver `AGENTS.md` secao 2.
 
 Endpoint: `https://wxqwtyotkkshdjzzwjsk.supabase.co/functions/v1/evolution-webhook`
 

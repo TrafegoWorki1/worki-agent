@@ -1,0 +1,61 @@
+# .dockerignore — o que NAO entra na imagem.
+#
+# Regra principal: nenhum segredo. `.env` nunca vai para a imagem, e o
+# `.dockerignore` e a ultima linha de defesa se alguem esquecer o
+# `.gitignore`.
+
+# --- segredos ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*_rsa
+id_rsa*
+credentials.json
+
+# --- git ---
+.git
+.gitignore
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# --- testes nao sao necessarios em runtime ---
+# Eles rodam no CI/na sua maquina. Na imagem so o servico.
+testes/
+*.zip
+
+# --- docs pesadas (a doc de deploy entra, o resto nao precisa) ---
+docs/*.png
+docs/*.svg
+docs/*.jpg
+
+# --- sistema e editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- logs e temporarios ---
+*.log
+logs/
+tmp/
+*.db
+*.db-shm
+*.db-wal
+
+# --- credenciais de outra pasta do repo ---
+automacoes/
+paginas/
+supabase/
+integracoes/zernio/

@@ -1,7 +1,6 @@
-"""Carrega as variaveis do .env do repo. Nao imprime valores.
+"""Configuracao do servidor: ambiente tem prioridade sobre .env opcional.
 
-Por que existe: o shell deste ambiente mascara variaveis de ambiente que
-parecem segredo, substituindo por `***`. Ler do arquivo evita isso.
+Nao imprime valores. No EasyPanel nao e necessario criar um arquivo .env.
 """
 
 import os
@@ -21,9 +20,9 @@ def carregar() -> dict:
             k, v = linha.split("=", 1)
             dados[k.strip()] = v.strip().strip("'\"")
     # env tem prioridade sobre o arquivo
-    for k in list(dados):
-        if os.environ.get(k):
-            dados[k] = os.environ[k]
+    # Incluir nomes que so existem no ambiente. Um valor explicitamente vazio
+    # tambem prevalece: nao reutilizar uma credencial antiga do arquivo.
+    dados.update(os.environ)
     return dados
 
 
@@ -32,10 +31,10 @@ CFG = carregar()
 
 def chave(nome: str) -> str:
     v = CFG.get(nome, "")
-    if not v:
+    if not v or v.strip() == "***":
         raise SystemExit(
-            f"Falta {nome} no {ARQUIVO}\n"
-            f"Copie .env.example para .env e preencha."
+            f"Configure {nome} nas variaveis do servico EasyPanel "
+            "ou no .env local. Valor ausente ou mascarado."
         )
     return v
 
