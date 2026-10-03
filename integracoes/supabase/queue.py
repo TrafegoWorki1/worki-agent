@@ -312,6 +312,47 @@ def concluir(entrada_id: str, erro: str | None = None,
     return str(valor) if valor else None
 
 
+def tarefa_em_andamento(instancia: str, chat_jid: str) -> dict | None:
+    """Pedido que o worker esta executando agora nesta conversa, ou None.
+
+    Usado pelo atalho de andamento do receptor. Devolve
+    {"entrada_id", "objetivo", "iniciada_em"}; o objetivo e o texto do pedido
+    (gravado por worki_iniciar_entrada). So leitura.
+    """
+    q = urllib.parse.quote
+    convs = _rest("GET", f"/rest/v1/conversas?instancia=eq.{q(instancia, safe='')}"
+                         f"&chat_jid=eq.{q(chat_jid, safe='')}&select=id&limit=1",
+                  prefer="return=representation")
+    if not convs:
+        return None
+    ents = _rest("GET", f"/rest/v1/entradas?conversa_id=eq.{q(str(convs[0]['id']), safe='')}"
+                        f"&status=eq.processando&select=id,execucao_iniciada_em,atualizado_em"
+                        f"&order=ordem.asc&limit=1",
+                 prefer="return=representation")
+    if not ents:
+        return None
+    e = ents[0]
+    tars = _rest("GET", f"/rest/v1/tarefas?entrada_id=eq.{q(str(e['id']), safe='')}"
+                        f"&select=objetivo&limit=1",
+                 prefer="return=representation")
+    return {
+        "entrada_id": str(e["id"]),
+        "objetivo": (tars[0].get("objetivo") if tars else None) or "",
+        "iniciada_em": e.get("execucao_iniciada_em") or e.get("atualizado_em"),
+    }
+
+
+def cancelar_entrada(entrada_id: str, motivo: str) -> None:
+    """Cancela uma entrada que AINDA nao foi pega pelo worker.
+
+    O filtro status=aguardando garante que nao se cancela trabalho em curso:
+    se o worker ja reservou, a atualizacao nao casa e nada muda.
+    """
+    eid = urllib.parse.quote(entrada_id, safe="")
+    _rest("PATCH", f"/rest/v1/entradas?id=eq.{eid}&status=eq.aguardando",
+          {"status": "cancelada", "ultimo_erro": motivo[:200]})
+
+
 def recuperar_leases() -> int:
     """Devolve leases vencidas para a fila. Chame no boot.
 

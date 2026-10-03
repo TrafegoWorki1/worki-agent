@@ -127,6 +127,9 @@ class Config:
     # Caracteres por mensagem no WhatsApp; respostas maiores sao divididas em
     # limite de paragrafo. 0 = nao dividir.
     WORKI_WHATSAPP_MAX_CHARS: int = 1500
+    # Responde "terminou?", "cade?" na hora, pelo receptor, quando ha pedido
+    # em execucao. False desliga (volta a ir para a fila).
+    WORKI_ATALHO_ANDAMENTO: bool = True
     WORKI_WORKSPACE_DIR: str = "/workspace"
     WORKI_HERMES_HOME: str = "/opt/data"
     WORKI_OWNER_ID: str = "herickson"
@@ -171,6 +174,8 @@ class Config:
             "WORKI_TASK_TIMEOUT_SECONDS", 1500)
         c.WORKI_ACK_AFTER_SECONDS = inteiro("WORKI_ACK_AFTER_SECONDS", 0)
         c.WORKI_WHATSAPP_MAX_CHARS = inteiro("WORKI_WHATSAPP_MAX_CHARS", 1500)
+        c.WORKI_ATALHO_ANDAMENTO = (chave("WORKI_ATALHO_ANDAMENTO", obrigatorio=False)
+                                    or "1").strip().lower() not in ("0", "false", "nao", "no")
         c.WORKI_WORKSPACE_DIR = chave("WORKI_WORKSPACE_DIR", "/workspace",
                                       obrigatorio=False)
         c.WORKI_HERMES_HOME = chave("WORKI_HERMES_HOME", "/opt/data",
