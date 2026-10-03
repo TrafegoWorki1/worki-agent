@@ -124,6 +124,9 @@ class Config:
     # 0 = desligado. >0: se o Hermes ainda nao respondeu depois desse numero
     # de segundos, o worker manda um "recebi, estou trabalhando" no WhatsApp.
     WORKI_ACK_AFTER_SECONDS: int = 0
+    # Caracteres por mensagem no WhatsApp; respostas maiores sao divididas em
+    # limite de paragrafo. 0 = nao dividir.
+    WORKI_WHATSAPP_MAX_CHARS: int = 1500
     WORKI_WORKSPACE_DIR: str = "/workspace"
     WORKI_HERMES_HOME: str = "/opt/data"
     WORKI_OWNER_ID: str = "herickson"
@@ -167,6 +170,7 @@ class Config:
         c.WORKI_TASK_TIMEOUT_SECONDS = inteiro(
             "WORKI_TASK_TIMEOUT_SECONDS", 1500)
         c.WORKI_ACK_AFTER_SECONDS = inteiro("WORKI_ACK_AFTER_SECONDS", 0)
+        c.WORKI_WHATSAPP_MAX_CHARS = inteiro("WORKI_WHATSAPP_MAX_CHARS", 1500)
         c.WORKI_WORKSPACE_DIR = chave("WORKI_WORKSPACE_DIR", "/workspace",
                                       obrigatorio=False)
         c.WORKI_HERMES_HOME = chave("WORKI_HERMES_HOME", "/opt/data",

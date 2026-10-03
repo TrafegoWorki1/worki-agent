@@ -16,12 +16,18 @@ fazemos e ser honestos sobre o que nao sabemos.
 
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from integracoes.config import Config, digitos  # noqa: E402
+from integracoes.evolution import formato  # noqa: E402
+
+# Pausa entre as partes de uma resposta dividida: garante a ordem de chegada
+# e evita rajada na Evolution.
+PAUSA_ENTRE_PARTES_S = 0.6
 
 _CFG = None
 
@@ -49,15 +55,54 @@ def _headers() -> dict:
     return h
 
 
+def _limite() -> int:
+    """Caracteres por mensagem (WORKI_WHATSAPP_MAX_CHARS); 0 desliga a divisao."""
+    return getattr(cfg(), "WORKI_WHATSAPP_MAX_CHARS", formato.LIMITE_PADRAO)
+
+
 def enviar_texto(numero: str, texto: str, timeout: int = 45) -> tuple[str, str | None]:
-    """Envia. Devolve (estado, provider_message_id).
+    """Formata, divide se for longo e envia. Devolve (estado, provider_message_id).
 
     `numero` so com digitos, sem @s.whatsapp.net. Em grupo, o receptor ja
     resolveu o destinatario antes de chegar aqui.
+
+    O texto passa por `formato.preparar`: Markdown de terminal vira o dialeto
+    do WhatsApp e respostas longas viram varias mensagens, quebradas em limite
+    de paragrafo. O id devolvido e o da primeira parte.
+
+    Falha no meio de uma resposta dividida: se a PRIMEIRA parte nao saiu,
+    devolve o estado dela (nada foi enviado, pode reenviar tudo). Se a
+    primeira saiu e uma seguinte falhou, devolve ENTREGUE e registra o aviso:
+    reenviar tudo repetiria o comeco para o usuario, e esta camada prefere
+    perder o final a duplicar (AGENTS.md: nao reenviar as cegas).
     """
+    destino = str(numero or "") if str(numero or "").endswith("@g.us") else digitos(numero)
+    partes = formato.preparar(texto, _limite())
+    if not partes:
+        return Estado.FALHOU, None
+    if len(partes) == 1:
+        return _enviar_uma(destino, partes[0], timeout)
+
+    primeiro_id = None
+    for i, parte in enumerate(partes):
+        estado, mid = _enviar_uma(destino, parte, timeout)
+        if i == 0:
+            primeiro_id = mid
+        if estado != Estado.ENTREGUE:
+            if i == 0:
+                return estado, None
+            print(f"  AVISO: parte {i + 1}/{len(partes)} nao saiu ({estado}); "
+                  f"as anteriores ja foram entregues", file=sys.stderr)
+            return Estado.ENTREGUE, primeiro_id
+        if i < len(partes) - 1:
+            time.sleep(PAUSA_ENTRE_PARTES_S)
+    return Estado.ENTREGUE, primeiro_id
+
+
+def _enviar_uma(destino: str, texto: str, timeout: int = 45) -> tuple[str, str | None]:
+    """Uma chamada a Evolution, uma mensagem. Os tres estados valem para ela."""
     c = cfg()
     url = f"{c.EVOLUTION_API_URL}/message/sendText/{c.EVOLUTION_INSTANCE}"
-    destino = str(numero or "") if str(numero or "").endswith("@g.us") else digitos(numero)
     req = urllib.request.Request(
         url,
         data=json.dumps({"number": destino, "text": texto}).encode(),
@@ -133,9 +178,14 @@ def reconciliar(saida: dict) -> str:
     eco. Errar para o lado de "nao reenviar" e melhor: uma resposta a
     mais incomoda, uma pergunta sem resposta trava o trabalho.
     """
-    texto = (saida.get("texto") or "").strip()
-    if not texto:
+    original = (saida.get("texto") or "").strip()
+    if not original:
         return "falhou"
+    # Compara com o que foi de fato enviado: a primeira parte do texto ja
+    # formatado. Sem isso, "**negrito**" virou "*negrito*" no WhatsApp, o
+    # prefixo nao bate e o reconciliador concluiria que nao saiu e reenviaria.
+    partes = formato.preparar(original, _limite())
+    texto = partes[0] if partes else original
 
     mensagens = listar_mensagens()
     if not mensagens:
