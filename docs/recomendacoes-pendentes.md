@@ -245,3 +245,24 @@ O que investigar (precisa de acesso ao `/opt/data/config.yaml` do Hermes):
 Também visto nas capturas, e **não verificado**: duas frases coladas sem quebra
 ("flat shading**Se** quiser variar"). A limpeza antiga não explica esse caso (ela
 mantinha a quebra entre linhas não vazias); pode ser do próprio modelo.
+
+---
+
+## 7. Atalho de andamento e onde entra um modelo de decisão (Jev)
+
+**Feito.** O worker processa um pedido por vez e a reserva trava a conversa
+enquanto há um pedido em `processando`. Por isso "terminou?" esperava a tarefa
+acabar. Agora o receptor (`integracoes/evolution/webhook.py`) reconhece cobranças
+curtas de andamento (`integracoes/triagem.py`) e, se há pedido rodando, responde
+na hora com o pedido e há quanto tempo começou, e cancela a entrada para o Hermes
+não responder de novo. Sem pedido rodando, ou com qualquer falha, segue a fila.
+`WORKI_ATALHO_ANDAMENTO=0` desliga.
+
+**Onde o Jev entra, quando houver acesso:** em `triagem.e_pergunta_de_andamento`,
+para as frases ambíguas que a regra não pega. O contrato não muda: devolve
+verdadeiro ou falso, e na dúvida falso (segue a fila). Antes de ligar, medir com
+mensagens reais rotuladas; o Laya teve 25% de acerto (AGENTS.md §8).
+
+**Onde NÃO entra:** allowlist e aprovação (`aprovacao/guard.py`) continuam exatas,
+por número e por palavra. Um modelo probabilístico ali deixaria passar comando ou
+aprovação falsa.

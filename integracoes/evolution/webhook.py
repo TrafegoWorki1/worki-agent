@@ -51,12 +51,14 @@ import json
 import logging
 import os
 import sys
+import threading
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from integracoes.config import Config, digitos  # noqa: E402
+from integracoes import triagem  # noqa: E402
 
 log = logging.getLogger("worki.receptor")
 
@@ -262,11 +264,21 @@ def checar_autorizacao(ev: Evento, cfg) -> tuple[bool, str]:
 class Receptor:
     """Guarda o estado e expoe as rotas. Sem estado global solto."""
 
-    def __init__(self, cfg, gravar=None):
+    def __init__(self, cfg, gravar=None, buscar_tarefa=None, enviar=None,
+                 cancelar=None, executar=None):
         self.cfg = cfg
         # `gravar(evento) -> (entrada_id, ja_existia)`. Injetavel para
         # testar sem banco.
         self.gravar = gravar or self._gravar_real
+        # Atalho de andamento: dependencias injetaveis (testes sem rede).
+        # `executar(fn)` roda fn em segundo plano por padrao, para o receptor
+        # devolver 200 a Evolution sem esperar o envio da resposta.
+        self._buscar_tarefa = buscar_tarefa
+        self._enviar = enviar
+        self._cancelar = cancelar
+        self._executar = executar or (
+            lambda fn: threading.Thread(target=fn, daemon=True).start())
+        self.atalhos = 0
         self.auditado = 0
         self.autorizados = 0
         self.duplicados = 0
@@ -351,6 +363,12 @@ class Receptor:
             self.autorizados += 1
             if ja_existia:
                 self.duplicados += 1
+            elif (getattr(self.cfg, "WORKI_ATALHO_ANDAMENTO", False)
+                  and triagem.e_pergunta_de_andamento(ev.texto)):
+                # So depois de persistir: se a Evolution repetir o evento, ele
+                # chega como duplicado e nao gera uma segunda resposta.
+                self._executar(
+                    lambda ev=ev, eid=str(entrada_id): self._atalho_andamento(ev, eid))
             detalhe.append({
                 "entrada": str(entrada_id),
                 "duplicada": bool(ja_existia),
@@ -358,6 +376,38 @@ class Receptor:
             })
 
         return 200, {"ok": True, "recebidos": len(eventos), "detalhe": detalhe}
+
+    def _atalho_andamento(self, ev: "Evento", entrada_id: str) -> None:
+        """Responde "terminou?" na hora quando ha pedido em execucao.
+
+        O worker processa um pedido por vez e a conversa fica travada enquanto
+        um pedido esta em 'processando'. Sem isto, a pergunta so era respondida
+        quando a tarefa ja tinha acabado.
+
+        Seguro por construcao: se nao ha tarefa em execucao, se a consulta ou o
+        envio falham, a entrada fica como esta e segue o caminho normal (fila ->
+        Hermes). So cancela a entrada DEPOIS de a resposta ter saido, e o
+        cancelamento so casa se o worker ainda nao a pegou.
+        """
+        try:
+            from integracoes.supabase import queue
+            from integracoes.evolution import cliente
+            buscar = self._buscar_tarefa or queue.tarefa_em_andamento
+            enviar = self._enviar or cliente.enviar_texto
+            cancelar = self._cancelar or queue.cancelar_entrada
+
+            tarefa = buscar(ev.instancia, ev.chat_jid)
+            if not tarefa or tarefa.get("entrada_id") == entrada_id:
+                return
+            estado, _ = enviar(ev.chat_jid, triagem.mensagem_andamento(tarefa))
+            if estado != "entregue":
+                log.warning("atalho de andamento nao enviado (%s); segue pela fila", estado)
+                return
+            self.atalhos += 1
+            cancelar(entrada_id, "respondida pelo atalho de andamento")
+            log.info("atalho de andamento respondeu a entrada %s", entrada_id)
+        except Exception as e:
+            log.warning("atalho de andamento falhou, segue pela fila: %s", e)
 
     def health(self) -> tuple[int, dict]:
         """Liveness: o processo responde. Nao diz se o banco esta de pe."""
