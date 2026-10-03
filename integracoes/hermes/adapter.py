@@ -170,6 +170,7 @@ class Adaptador:
         fonte: bool = True,
     ):
         self.binario = binario
+        self.hermes_home = os.environ.get("WORKI_HERMES_HOME") or None
         self.timeout = timeout
         self.cwd = str(cwd) if cwd else None
         # source=oneshot esconde a sessao dos seletores da TUI/Desktop.
@@ -177,6 +178,25 @@ class Adaptador:
         # sessoes que ele ve no terminal.
         self.source = "oneshot"
         self.fonte = fonte
+
+    def _ambiente(self) -> dict:
+        """Ambiente do processo Hermes.
+
+        O HOME precisa apontar para o volume: e onde ficam config, sessoes
+        e o state.db. Sem isso o Hermes sobe sem perfil, o provedor de
+        modelo nao e encontrado e a chamada falha com stderr quase vazio
+        — que e como o problema de 2026-10-03 passou despercebido.
+
+        WORKI_HERMES_HOME tem precedencia: e o que o servico define.
+        """
+        env = dict(os.environ)
+        home = self.hermes_home or env.get("WORKI_HERMES_HOME")
+        if home:
+            env["HOME"] = home
+            env["USERPROFILE"] = home
+            env["HERMES_HOME"] = home
+        env.setdefault("PATH", "/opt/hermes/.venv/bin:" + env.get("PATH", ""))
+        return env
 
     def _comando(self, prompt: str, session_id: str | None) -> list[str]:
         # `chat -q`, nao `-z`: e o subcomando que aceita --source. Com
@@ -227,6 +247,7 @@ class Adaptador:
                 cwd=self.cwd,
                 encoding="utf-8",
                 errors="replace",
+                env=self._ambiente(),
             )
         except subprocess.TimeoutExpired:
             # Nao marca a sessao como conclusion: o proximo run cria outra
@@ -243,7 +264,16 @@ class Adaptador:
 
         stdout = _limpar(proc.stdout or "")
         stderr = (proc.stderr or "").strip()
-        log = f"{log_cmd}\n{stderr[:1000]}"
+        # O motivo da falha precisa sobreviver. `log_cmd` sozinho
+        # ("hermes chat -q") nao diz nada: em 2026-10-03 o Hermes falhava
+        # dentro do container e a auditoria guardava so essa string, sem
+        # stdout, stderr nem codigo de saida — impossivel diagnosticar.
+        log = (
+            f"{log_cmd}\n"
+            f"exit={proc.returncode}\n"
+            f"stdout={stdout[:400]!r}\n"
+            f"stderr={stderr[:2000]}"
+        )
 
         # Somente o ID reportado por esta execucao pode ser associado à
         # conversa. Nunca escolher a sessão mais recente do state.db: outro
