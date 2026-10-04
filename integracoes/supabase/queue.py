@@ -21,6 +21,7 @@ NUNCA serao criadas. Fica no repo como historico, e nao e importado.
 
 import hashlib
 import json
+import re
 import logging
 import os
 import socket
@@ -399,6 +400,64 @@ def tarefas_ativas(conversa_id: str) -> list[dict]:
         f"/rest/v1/tarefas?conversa_id=eq.{conversa_id}"
         f"&status=in.(ativa,bloqueada)&order=criado_em.desc&limit=5",
         prefer="return=representation") or []
+
+
+_DIGITOS = re.compile(r"^\d{8,15}$")
+_ID_OK = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
+
+
+def memorias_ativas(dono: str, projeto: str | None = None,
+                    limite: int = 40) -> list[dict]:
+    """Memorias CONFIRMADAS e ativas do dono: as globais e as do projeto.
+
+    O filtro tambem e refeito em `integracoes.memoria.memorias_visiveis`.
+    """
+    if not _DIGITOS.match(dono):
+        return []
+    filtro = "&projeto_id=is.null"
+    if projeto:
+        if not _ID_OK.match(projeto):
+            return []
+        filtro = f"&or=(projeto_id.is.null,projeto_id.eq.{projeto})"
+    return _rest(
+        "GET",
+        f"/rest/v1/memorias?proprietario_id=eq.{dono}&status=eq.ativa"
+        f"&confirmada=eq.true{filtro}&order=criado_em.desc&limit={int(limite)}",
+        prefer="return=representation") or []
+
+
+def memorias_do_dono(dono: str, limite: int = 100) -> list[dict]:
+    """Todas as ativas (inclui hipoteses), para o agente conferir antes de gravar."""
+    if not _DIGITOS.match(dono):
+        return []
+    return _rest(
+        "GET",
+        f"/rest/v1/memorias?proprietario_id=eq.{dono}&status=eq.ativa"
+        f"&order=criado_em.desc&limit={int(limite)}",
+        prefer="return=representation") or []
+
+
+def mensagem_e_do_dono(mensagem_id: str, dono: str) -> bool:
+    """A mensagem existe e foi enviada pelo dono?"""
+    if not _UUID.match(mensagem_id or "") or not _DIGITOS.match(dono):
+        return False
+    linhas = _rest(
+        "GET", f"/rest/v1/mensagens?id=eq.{mensagem_id}&select=de",
+        prefer="return=representation")
+    return bool(linhas) and re.sub(
+        r"\D", "", str(linhas[0].get("de") or "").split("@")[0]) == dono
+
+
+def salvar_memoria(dono: str, projeto: str | None, chave: str, valor: str,
+                   tipo: str, fonte: str, confirmada: bool = False):
+    """Grava ou corrige uma memoria pela RPC (a versao anterior fica como
+    `substituida`)."""
+    return _rpc("worki_salvar_memoria", {
+        "p_proprietario": dono, "p_projeto": projeto, "p_chave": chave,
+        "p_valor": valor, "p_tipo": tipo, "p_fonte": fonte,
+        "p_confirmada": confirmada,
+    })
 
 
 def criar_tarefa(conversa_id: str, entrada_id: str, objetivo: str) -> str | None:
