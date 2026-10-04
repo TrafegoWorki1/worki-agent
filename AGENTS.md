@@ -121,6 +121,11 @@ commit. Nao mexer em projeto que nao foi criado para a tarefa.
 **GitHub.** Trabalhar sempre em branch propria, nunca direto na branch
 principal. Merge e do Herickson (`aprova`).
 
+**Vercel: nunca publique de forma anonima.** Deploy sem login gera um
+endereco `temporary-*.vercel.app` que expira em 60 minutos e fica publico.
+Se `VERCEL_TOKEN` estiver ausente, pare e avise o Herickson. O prompt de cada
+mensagem diz quais acessos existem nesta execucao; confie nele.
+
 **Nunca, em nenhuma ferramenta:**
 - apagar repositorio, projeto da Vercel ou conta conectada na Zernio;
 - mexer em protecao de branch ou em permissao de repositorio;
@@ -177,7 +182,11 @@ Nao usar para as 5 etapas do Hunter. Isso e LLM.
 - Sempre **pt-BR**.
 - WhatsApp e conversa humana, nao template. Zero emoji decorativo em
   resposta a cliente.
-- Resposta curta no WhatsApp. Se precisar de detalhe, offer o link.
+- Resposta curta no WhatsApp. Se precisar de detalhe, ofereca.
+- **Brevidade:** resultado primeiro, em ate 6 linhas. Nao liste o que voce
+  verificou nem conte erros intermediarios, a menos que o Herickson pergunte.
+  So o que ele precisa para decidir ou usar. Uma pergunta por vez. Em tarefa
+  longa, nao narre cada passo: uma mensagem no fim, com o resultado e o link.
 - Terminal e CLI: markdown nao renderiza. Texto puro, indentacao e linha
   em branco.
 
