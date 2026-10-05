@@ -182,12 +182,17 @@ def testar_receptor():
     checar("sem id nao enfileira (dedupe imposible)",
            normalizar(ev_sem_id, "agent-domintante") is None)
 
-    # --- audio nao entra ---
+    # --- audio: reconhecido, mas sem texto ate ser transcrito ---
+    # (antes o audio era descartado; agora o receptor o transcreve em segundo
+    # plano, so para quem passou na allowlist. Ver integracoes/midia.py.)
     ev_audio = {"event": "MESSAGES_UPSERT", "data": {
         "remoteJid": "558592494552@s.whatsapp.net",
         "key": {"id": "MA1"},
         "message": {"audioMessage": {"ptt": True}}}}
-    checar("audio nao enfileira", normalizar(ev_audio, "agent-domintante") is None)
+    n_audio = normalizar(ev_audio, "agent-domintante")
+    checar("audio vira evento com midia e sem texto",
+           n_audio is not None and n_audio.midia is not None
+           and n_audio.midia["tipo"] == "audio" and n_audio.texto == "")
 
     # --- falha de persistencia devolve 5xx ---
     def gravar_quebrada(ev):

@@ -58,6 +58,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from integracoes.config import Config, digitos  # noqa: E402
+from integracoes import midia as midia_mod  # noqa: E402
 from integracoes import triagem  # noqa: E402
 
 log = logging.getLogger("worki.receptor")
@@ -82,6 +83,9 @@ class Evento:
     grupo: str | None = None
     de_mim: bool = False
     participants: list[str] = field(default_factory=list)
+    # Audio ou documento ainda por baixar (integracoes/midia.py). Com isto, o
+    # `texto` vem vazio ate o receptor transcrever ou salvar o arquivo.
+    midia: dict | None = None
 
     @property
     def em_grupo(self) -> bool:
@@ -206,11 +210,17 @@ def normalizar(evento: dict, instancia_padrao: str) -> Evento | None:
     elif btn.get("selectedButtonId"):
         texto, tipo = str(btn["selectedButtonId"]), "buttonResponseMessage"
 
-    # Audio NAO entra. Transcricao e um passo explicito e nao esta
-    # resolvido nesta versao. Aceitar e enfileirar vazio produziria job
-    # sem conteudo.
+    # Audio e documento: o texto so existe depois de transcrever ou salvar o
+    # arquivo, e isso so acontece para quem passou na allowlist (o receptor
+    # decide). Aqui so se reconhece o tipo. Mensagem sem texto e sem midia
+    # reconhecida continua sendo descartada.
+    midia = None
     if not texto.strip():
-        return None
+        midia = midia_mod.extrair_midia(msg, dados)
+        if midia is None:
+            return None
+        tipo = "audioMessage" if midia["tipo"] == "audio" else "documentMessage"
+        texto = midia.get("legenda") or ""
 
     mid = str(key.get("id") or "")
     if not mid:
@@ -229,6 +239,7 @@ def normalizar(evento: dict, instancia_padrao: str) -> Evento | None:
         tipo_mensagem=tipo,
         grupo=remote_jid if em_grupo else None,
         participants=todos_part,
+        midia=midia,
     )
 
 
@@ -265,7 +276,7 @@ class Receptor:
     """Guarda o estado e expoe as rotas. Sem estado global solto."""
 
     def __init__(self, cfg, gravar=None, buscar_tarefa=None, enviar=None,
-                 cancelar=None, executar=None):
+                 cancelar=None, executar=None, preparar_midia=None):
         self.cfg = cfg
         # `gravar(evento) -> (entrada_id, ja_existia)`. Injetavel para
         # testar sem banco.
@@ -278,6 +289,12 @@ class Receptor:
         self._cancelar = cancelar
         self._executar = executar or (
             lambda fn: threading.Thread(target=fn, daemon=True).start())
+        # `preparar_midia(ev) -> texto`: baixa e transcreve/salva. Injetavel
+        # para testar sem rede.
+        self._preparar_midia = preparar_midia
+        self._midias_em_curso: set[str] = set()
+        self._trava_midia = threading.Lock()
+        self.midias = 0
         self.atalhos = 0
         self.auditado = 0
         self.autorizados = 0
@@ -345,6 +362,16 @@ class Receptor:
                 log.info("recusado %s de ...%s", motivo, ev.remetente_numeros[-4:])
                 continue
 
+            if ev.midia is not None:
+                # Transcrever leva segundos: faz em segundo plano e devolve 200
+                # a Evolution agora. O evento so entra na fila quando o texto
+                # existe; repeticao do mesmo id em andamento e ignorada.
+                iniciou = self._midia_em_segundo_plano(ev)
+                detalhe.append({"midia": ev.midia["tipo"],
+                                "em_processamento": iniciou,
+                                "duplicada": not iniciou})
+                continue
+
             try:
                 entrada_id, ja_existia = self.gravar(ev)
             except Exception as e:
@@ -376,6 +403,63 @@ class Receptor:
             })
 
         return 200, {"ok": True, "recebidos": len(eventos), "detalhe": detalhe}
+
+    def _midia_em_segundo_plano(self, ev: "Evento") -> bool:
+        """Agenda o processamento da midia. False se esse id ja esta em curso."""
+        with self._trava_midia:
+            if ev.provider_message_id in self._midias_em_curso:
+                return False
+            self._midias_em_curso.add(ev.provider_message_id)
+        self._executar(lambda ev=ev: self._processar_midia(ev))
+        return True
+
+    def _processar_midia(self, ev: "Evento") -> None:
+        """Baixa, transcreve ou salva, e so entao grava na fila.
+
+        Falha conhecida (tipo nao aceito, servidor de voz fora, arquivo grande)
+        vira um aviso curto ao dono: ele nunca fica sem resposta. Falha
+        inesperada so vai para o log, sem detalhe tecnico no WhatsApp.
+        """
+        try:
+            try:
+                preparar = self._preparar_midia or self._preparar_midia_real
+                texto = preparar(ev)
+            except midia_mod.MidiaErro as e:
+                rotulo = "áudio" if ev.midia["tipo"] == "audio" else "arquivo"
+                log.info("midia nao processada (%s): %s", ev.midia["tipo"], e)
+                self._avisar(ev, f"Recebi seu {rotulo}, mas não consegui usar: {e}")
+                return
+            except Exception as e:  # noqa: BLE001
+                log.error("falha inesperada na midia: %s", e)
+                self._avisar(ev, "Recebi seu arquivo, mas deu um problema ao abri-lo. "
+                                 "Pode tentar de novo?")
+                return
+
+            ev.texto = texto
+            entrada_id, ja_existia = self.gravar(ev)
+            if entrada_id is None:
+                log.error("RPC devolveu entrada_id nulo (midia)")
+                return
+            self.midias += 1
+            self.autorizados += 1
+            if ja_existia:
+                self.duplicados += 1
+        except Exception as e:  # noqa: BLE001
+            log.error("falha ao gravar a midia: %s", e)
+        finally:
+            with self._trava_midia:
+                self._midias_em_curso.discard(ev.provider_message_id)
+
+    def _preparar_midia_real(self, ev: "Evento") -> str:
+        return midia_mod.texto_para_a_fila(
+            ev.midia, ev.provider_message_id, self.cfg, ev.instancia)
+
+    def _avisar(self, ev: "Evento", texto: str) -> None:
+        try:
+            from integracoes.evolution import cliente
+            (self._enviar or cliente.enviar_texto)(ev.chat_jid, texto)
+        except Exception as e:  # noqa: BLE001
+            log.warning("aviso de midia nao enviado: %s", e)
 
     def _atalho_andamento(self, ev: "Evento", entrada_id: str) -> None:
         """Responde "terminou?" na hora quando ha pedido em execucao.

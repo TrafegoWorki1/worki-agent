@@ -274,7 +274,11 @@ Honesto, para ninguem descobrir em producao:
   testado** nesta versao. Se o endpoint nao existir, o veredito fica
   `incerto` e a saida nao e reenviada — que e o comportamento seguro, mas
   significa resposta parada ate resolver.
-- **Audio por transcricao**: fora do escopo. O receptor recusa audio.
+- **Audio e documento**: o receptor aceita (so do dono), transcreve o audio em um
+  servidor Whisper (`WHISPER_URL`) e salva o documento em `/workspace/entrada/`.
+  Ver `integracoes/midia.py` e AGENTS.md secao 17. A Evolution precisa do
+  endpoint `getBase64FromMediaMessage` ou do base64 no webhook; confirmar na
+  versao instalada.
 
 ---
 

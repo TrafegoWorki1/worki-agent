@@ -134,6 +134,16 @@ class Config:
     WORKI_HERMES_HOME: str = "/opt/data"
     WORKI_OWNER_ID: str = "herickson"
     WORKI_DRY_RUN: bool = False
+    # --- Audio e documentos (integracoes/midia.py) ---
+    # Servidor Whisper proprio. Sem WHISPER_URL o audio recebe um aviso e nao
+    # e transcrito; documento funciona sem ele.
+    WHISPER_URL: str = ""
+    WHISPER_API_KEY: str = ""
+    WORKI_STT_FORMATO: str = "auto"      # auto | openai | asr
+    WORKI_STT_MODELO: str = "whisper-1"
+    WORKI_STT_IDIOMA: str = "pt"
+    WORKI_MIDIA_MAX_MB: int = 20
+    WORKI_ENTRADA_DIR: str = "/workspace/entrada"
 
     @classmethod
     def carregar(cls) -> "Config":  # noqa: UP037
@@ -184,6 +194,16 @@ class Config:
                                  obrigatorio=False)
         c.WORKI_DRY_RUN = chave("WORKI_DRY_RUN", obrigatorio=False).lower() in (
             "1", "true", "yes")
+        c.WHISPER_URL = chave("WHISPER_URL", obrigatorio=False)
+        c.WHISPER_API_KEY = chave("WHISPER_API_KEY", obrigatorio=False)
+        c.WORKI_STT_FORMATO = (chave("WORKI_STT_FORMATO", "auto", obrigatorio=False)
+                               or "auto").lower()
+        c.WORKI_STT_MODELO = chave("WORKI_STT_MODELO", "whisper-1", obrigatorio=False)
+        c.WORKI_STT_IDIOMA = chave("WORKI_STT_IDIOMA", "pt", obrigatorio=False)
+        c.WORKI_MIDIA_MAX_MB = inteiro("WORKI_MIDIA_MAX_MB", 20)
+        c.WORKI_ENTRADA_DIR = chave("WORKI_ENTRADA_DIR",
+                                    f"{c.WORKI_WORKSPACE_DIR.rstrip('/')}/entrada",
+                                    obrigatorio=False)
         return c
 
     @classmethod
