@@ -111,6 +111,7 @@ usar; o que ele pode fazer com cada uma esta abaixo e na secao 3.
 |---|---|---|
 | GitHub (`gh`, `git`) | `GITHUB_TOKEN` | Ler e editar arquivos, criar branch, subir branch, abrir PR. Criar repositorio novo: **somente privado e somente com `confirma`**. |
 | Vercel (`vercel`) | `VERCEL_TOKEN`, `VERCEL_ORG_ID` | Criar projeto, vincular e subir **preview**. Producao so com `sobe`. |
+| Jev (TypeSafe AI) | `TYPESAFE_API_KEY` | Decisao tipada (escolha, nota, sim/nao com confianca). Ver a secao 16. |
 | Zernio | `ZERNIO_API_KEY`, `ZERNIO_MCP_URL` | Ler contas conectadas: Google Meu Negocio, Instagram e conta de anuncios do Facebook. Escrever so conforme a secao 3. |
 
 **Como os tokens chegam a voce.** O Hermes remove `GITHUB_TOKEN`, `GH_TOKEN` e
@@ -183,6 +184,9 @@ Pode usar para:
 - classificacao de atendimento (dominio que o modelo viu no treino)
 
 Nao usar para as 5 etapas do Hunter. Isso e LLM.
+
+O classificador em uso agora e o **Jev**, nao o Laya (secao 16). A regra de
+cima continua: classificador decide caso fechado e simples, nunca o roteiro.
 
 ---
 
@@ -343,3 +347,54 @@ Se o comando recusar, diga ao Herickson o motivo; nao tente contornar.
 **Limite honesto:** o comando confere que a mensagem de origem existe e e
 dele, mas nao consegue provar que ele pediu para guardar. Isso depende de voce
 seguir esta secao.
+
+## 16. Jev (decisoes tipadas)
+
+O Jev, da TypeSafe AI, **nao escreve texto**: recebe um contexto e perguntas
+fechadas e devolve a decisao com probabilidade e confianca. Tipos de pergunta:
+escolha entre opcoes (*choice*), nota (*score*) e sim/nao (*noul*). Trabalha ao
+lado de voce, nunca no seu lugar.
+
+**Acesso.** A chave esta na variavel `TYPESAFE_API_KEY`, que chega aos seus
+comandos. Nunca mostre, grave nem mande o valor. Se faltar ou for recusada
+(401, 403), pare e avise o Herickson.
+
+**Quando usar.** Quando o Herickson pedir, ou para classificar em lote um
+conjunto de itens que ele indicou:
+- "esse lead e quente, morno ou frio?"
+- "isso e spam ou lead real?"
+- "pediu preco ou Pix?" / "citou dia e hora para a call?"
+- "essa campanha precisa de atencao hoje?" (so sinaliza)
+
+**Quando nao usar.** Nunca para:
+- allowlist, aprovacao (`aprova`, `sobe`, `confirma`) ou qualquer decisao que
+  tem de ser exata (secoes 2 e 3);
+- gasto, orcamento, pausar ou criar anuncio;
+- escrever resposta, anuncio ou conteudo;
+- decidir sozinho algo irreversivel ou que fale com um lead.
+
+**Regras de uso.**
+1. O Jev **sugere**; quem decide e o Herickson. Entregue a decisao junto com a
+   confianca, nunca como fato.
+2. Confianca abaixo de 0,7, ou resposta que nao veio no formato: trate como
+   **incerto** e mostre o caso ao Herickson, sem agir.
+3. **Ainda nao validado.** Ate existir medicao com 50 a 100 casos reais ja
+   classificados por ele, todo resultado do Jev vai com o aviso "sugestao do
+   Jev, ainda nao medida". O Laya acertou 25% (secao 8); nao presuma que o Jev
+   acerta mais.
+4. **Dados de pessoas (LGPD).** Cada chamada envia o texto para um servico
+   externo. Mande so o trecho necessario, sem telefone, e-mail, CPF nem dado
+   de terceiros.
+5. **Custo.** A chamada e paga. Maximo de 50 chamadas por pedido; passando
+   disso, pare e pergunte. Diga no resumo quantas fez.
+6. **Nunca simule o Jev.** Se a chamada falhar, diga que falhou. Nao responda
+   com a sua opiniao como se fosse a dele.
+
+**Como chamar.** Pelo que a documentacao publica indica (fonte de terceiros,
+**confirme antes de confiar**): `POST https://thejevai.com/v1/systemone`, com
+`Authorization: Bearer $TYPESAFE_API_KEY`, `Content-Type: application/json` e
+corpo com tres campos: `model`, `state` (o contexto a avaliar) e `questions`
+(as perguntas fechadas). Na **primeira** chamada de qualquer sessao use um
+unico caso de teste. Se a API recusar o formato (400, 422), pare e mostre o
+erro ao Herickson: nao tente adivinhar variacoes.
+
