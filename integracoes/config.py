@@ -139,7 +139,7 @@ class Config:
     # e transcrito; documento funciona sem ele.
     WHISPER_URL: str = ""
     WHISPER_API_KEY: str = ""
-    WORKI_STT_FORMATO: str = "auto"      # auto | openai | asr
+    WORKI_STT_FORMATO: str = "auto"      # auto | transcribe | openai | asr
     WORKI_STT_MODELO: str = "whisper-1"
     WORKI_STT_IDIOMA: str = "pt"
     WORKI_MIDIA_MAX_MB: int = 20

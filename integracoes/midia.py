@@ -243,9 +243,10 @@ _FORMATO_QUE_FUNCIONOU: dict[str, str] = {}
 
 
 def transcrever(dados: bytes, mimetype: str, cfg, timeout: int = 120) -> str:
-    """Texto do audio. Formatos: `openai` (/v1/audio/transcriptions),
-    `asr` (/asr, do whisper-asr-webservice) ou `auto` (tenta o primeiro e cai
-    no segundo se o endereco nao existir)."""
+    """Texto do audio. Formatos: `transcribe` (POST /transcribe, campo
+    `audio_file`), `openai` (/v1/audio/transcriptions), `asr` (/asr, do
+    whisper-asr-webservice) ou `auto` (tenta cada um e cai no proximo se o
+    endereco nao existir; lembra o que funcionou)."""
     base = normalizar_url(getattr(cfg, "WHISPER_URL", ""))
     if not base:
         raise MidiaErro("a transcrição de áudio não está configurada (falta WHISPER_URL).")
@@ -261,21 +262,29 @@ def transcrever(dados: bytes, mimetype: str, cfg, timeout: int = 120) -> str:
                                   "response_format": "json"}, "file", nome, mimetype, dados)
         return _enviar_whisper(f"{base}/v1/audio/transcriptions", chave, corpo, tipo, timeout)
 
+    def via_transcribe():
+        corpo, tipo = _multipart({}, "audio_file", nome, mimetype, dados)
+        q = urllib.parse.urlencode({"language": idioma, "task": "transcribe"})
+        return _enviar_whisper(f"{base}/transcribe?{q}", chave, corpo, tipo, timeout)
+
     def via_asr():
         corpo, tipo = _multipart({}, "audio_file", nome, mimetype, dados)
         q = urllib.parse.urlencode({"output": "json", "language": idioma, "task": "transcribe"})
         return _enviar_whisper(f"{base}/asr?{q}", chave, corpo, tipo, timeout)
 
-    ordem = {"openai": [via_openai], "asr": [via_asr]}.get(formato)
+    por_nome = {"transcribe": via_transcribe, "openai": via_openai, "asr": via_asr}
+    ordem = [por_nome[formato]] if formato in por_nome else None
     if ordem is None:
+        ordem = list(por_nome.values())
         lembrado = _FORMATO_QUE_FUNCIONOU.get(base)
-        ordem = [via_asr, via_openai] if lembrado == "asr" else [via_openai, via_asr]
+        if lembrado in por_nome:
+            ordem.sort(key=lambda f: f is not por_nome[lembrado])
 
     ultimo = None
     for fn in ordem:
         try:
             resp = fn()
-            _FORMATO_QUE_FUNCIONOU[base] = "asr" if fn is via_asr else "openai"
+            _FORMATO_QUE_FUNCIONOU[base] = next(k for k, v in por_nome.items() if v is fn)
             texto = str(_d(resp).get("text") or "").strip()
             if not texto:
                 raise MidiaErro("não entendi nada nesse áudio.")
