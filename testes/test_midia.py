@@ -175,7 +175,8 @@ def test_transcreve_no_formato_openai(servidores):
     w = servidores({("POST", "/v1/audio/transcriptions"): (200, {"text": " oi, tudo bem? "})})
     t = midia.transcrever(OGG, "audio/ogg", cfg(WHISPER_URL=w.url))
     assert t == "oi, tudo bem?"
-    r = w.recebidos[0]
+    r = w.recebidos[-1]
+    assert r["caminho"] == "/v1/audio/transcriptions"
     assert r["cab"]["Authorization"] == "Bearer chave-whisper"
     assert b'name="model"' in r["corpo"] and b'name="file"' in r["corpo"] and OGG in r["corpo"]
 
@@ -183,12 +184,33 @@ def test_transcreve_no_formato_openai(servidores):
 def test_cai_para_o_formato_asr_quando_o_openai_nao_existe(servidores):
     w = servidores({("POST", "/asr"): (200, {"text": "texto do asr"})})
     assert midia.transcrever(OGG, "audio/ogg", cfg(WHISPER_URL=w.url)) == "texto do asr"
-    assert [x["caminho"] for x in w.recebidos] == ["/v1/audio/transcriptions", "/asr"]
-    assert "language=pt" in w.recebidos[1]["query"] and b'name="audio_file"' in w.recebidos[1]["corpo"]
+    assert [x["caminho"] for x in w.recebidos] == ["/transcribe", "/v1/audio/transcriptions", "/asr"]
+    assert "language=pt" in w.recebidos[2]["query"] and b'name="audio_file"' in w.recebidos[2]["corpo"]
     # lembra o formato que funcionou
     w.recebidos.clear()
     midia.transcrever(OGG, "audio/ogg", cfg(WHISPER_URL=w.url))
     assert [x["caminho"] for x in w.recebidos] == ["/asr"]
+
+
+def test_formato_transcribe_do_servidor_whisper_oficial(servidores):
+    w = servidores({("POST", "/transcribe"): (200, {"text": " ola mundo ", "language": "pt", "segments": []})})
+    t = midia.transcrever(OGG, "audio/ogg", cfg(WHISPER_URL=w.url, WHISPER_API_KEY=""))
+    assert t == "ola mundo"
+    r = w.recebidos[0]
+    assert r["caminho"] == "/transcribe" and "language=pt" in r["query"] and "task=transcribe" in r["query"]
+    assert b'name="audio_file"' in r["corpo"] and OGG in r["corpo"]
+    assert "Authorization" not in r["cab"]
+    # lembra: da proxima vez vai direto
+    w.recebidos.clear()
+    midia.transcrever(OGG, "audio/ogg", cfg(WHISPER_URL=w.url, WHISPER_API_KEY=""))
+    assert [x["caminho"] for x in w.recebidos] == ["/transcribe"]
+
+
+def test_formato_forcado_transcribe_nao_tenta_outros(servidores):
+    w = servidores({})
+    with pytest.raises(midia.MidiaErro, match="404"):
+        midia.transcrever(OGG, "audio/ogg", cfg(WHISPER_URL=w.url, WORKI_STT_FORMATO="transcribe"))
+    assert [x["caminho"] for x in w.recebidos] == ["/transcribe"]
 
 
 def test_chave_recusada_vira_mensagem_curta(servidores):
