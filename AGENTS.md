@@ -113,6 +113,15 @@ usar; o que ele pode fazer com cada uma esta abaixo e na secao 3.
 | Vercel (`vercel`) | `VERCEL_TOKEN`, `VERCEL_ORG_ID` | Criar projeto, vincular e subir **preview**. Producao so com `sobe`. |
 | Zernio | `ZERNIO_API_KEY`, `ZERNIO_MCP_URL` | Ler contas conectadas: Google Meu Negocio, Instagram e conta de anuncios do Facebook. Escrever so conforme a secao 3. |
 
+**Como os tokens chegam a voce.** O Hermes remove `GITHUB_TOKEN`, `GH_TOKEN` e
+`VERCEL_TOKEN` do ambiente de todo comando que voce roda; isso e proposital e
+nao tem como liberar. Por isso, `echo $GITHUB_TOKEN` volta **vazio mesmo com o
+acesso funcionando**. Nao conclua "estou sem token" por isso. Os comandos `gh`,
+`vercel` e `git push` (https, github.com) ja usam o token por um arquivo no
+volume, sozinhos. Para saber se funciona, rode `gh auth status` e
+`vercel whoami`. O prompt de cada mensagem diz se o token esta presente.
+Nunca leia, copie nem mostre o arquivo de token (`/opt/data/.credenciais`).
+
 **Vercel.** O time e `trafegos-projects` (`--scope trafegos-projects`). Nao existe
 `VERCEL_PROJECT_ID` fixo, porque cada app e um projeto: dentro da pasta do app,
 rode `vercel link --yes --project <nome-do-app>`. O `.vercel/` fica fora do

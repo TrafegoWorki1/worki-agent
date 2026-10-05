@@ -3,24 +3,37 @@
 Por que existe: o agente respondeu que nao sabia se tinha GitHub e Vercel e
 publicou uma pagina por deploy ANONIMO da Vercel (`temporary-*.vercel.app`),
 que expira em 60 minutos e fica publico. O AGENTS.md diz o que ele pode, mas
-nao diz o que esta presente de fato. Esta linha diz, lendo o ambiente, e nunca
-imprime o valor de nenhuma variavel.
+nao diz o que esta presente de fato.
+
+O que conta e o que o AGENTS consegue USAR, nao o que o container tem: o
+Hermes tira GITHUB_TOKEN, GH_TOKEN e VERCEL_TOKEN do ambiente dos comandos do
+agente. Por isso a checagem e o arquivo de credencial que os wrappers `gh` e
+`vercel` leem (integracoes/agente/preparar_credenciais.sh). Nunca imprime o
+valor de nenhum token.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Mapping
 
-
-def _tem(env: Mapping[str, str], *nomes: str) -> bool:
-    return any((env.get(n) or "").strip() for n in nomes)
+CREDENCIAIS_PADRAO = "/opt/data/.credenciais"
 
 
-def linha_de_ferramentas(env: Mapping[str, str] | None = None) -> str:
+def _tem(pasta: Path, nome: str) -> bool:
+    try:
+        return (pasta / nome).read_text().strip() != ""
+    except OSError:
+        return False
+
+
+def linha_de_ferramentas(env: Mapping[str, str] | None = None,
+                         pasta: str | Path | None = None) -> str:
     env = os.environ if env is None else env
-    gh = _tem(env, "GITHUB_TOKEN", "GH_TOKEN")
-    vc = _tem(env, "VERCEL_TOKEN")
+    base = Path(pasta or env.get("WORKI_CREDENCIAIS_DIR") or CREDENCIAIS_PADRAO)
+    gh = _tem(base, "github_token")
+    vc = _tem(base, "vercel_token")
 
     partes = [
         "Acessos desta execucao: "

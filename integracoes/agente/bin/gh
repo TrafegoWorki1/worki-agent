@@ -1,0 +1,17 @@
+#!/bin/sh
+# Wrapper do gh: passa o token do arquivo so a este processo.
+# O Hermes tira GH_TOKEN/GITHUB_TOKEN do ambiente do agente; ver
+# integracoes/agente/preparar_credenciais.sh.
+CRED="${WORKI_CREDENCIAIS_DIR:-/opt/data/.credenciais}"
+if [ -r "$CRED/github_token" ]; then
+    GH_TOKEN="$(cat "$CRED/github_token")"
+    export GH_TOKEN
+fi
+REAL="${WORKI_REAL_GH:-}"
+if [ -z "$REAL" ]; then
+    for c in /usr/bin/gh /usr/local/bin/gh; do
+        [ -x "$c" ] && REAL="$c" && break
+    done
+fi
+[ -n "$REAL" ] || { echo "gh nao encontrado na imagem" >&2; exit 127; }
+exec "$REAL" "$@"
