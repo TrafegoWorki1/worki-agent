@@ -44,6 +44,28 @@ log() { echo "[entrypoint] $*"; }
     set +a
 }
 
+# --- credenciais do agente: arquivo, nao ambiente ---
+# O Hermes remove GITHUB_TOKEN, GH_TOKEN e VERCEL_TOKEN do ambiente de todo
+# comando que o agente roda e nao ha como liberar (ver o cabecalho de
+# integracoes/agente/preparar_credenciais.sh). Aqui o token vira arquivo e os
+# wrappers `gh` e `vercel` (primeiros no PATH) o repassam. Falha nao derruba o
+# boot: sem isso o agente so fica sem GitHub e Vercel.
+APP_DIR="${WORKI_APP_DIR:-/app}"
+CRED_DIR="${WORKI_CREDENCIAIS_DIR:-/opt/data/.credenciais}"
+BIN_DIR="${WORKI_BIN_DIR:-/opt/data/bin}"
+if sh "$APP_DIR/integracoes/agente/preparar_credenciais.sh" \
+        "$APP_DIR/integracoes/agente/bin" "$CRED_DIR" "$BIN_DIR"; then
+    export WORKI_CREDENCIAIS_DIR="$CRED_DIR"
+    export PATH="$BIN_DIR:$PATH"
+    # git push por https usa o ajudante, sem depender de HOME nem de gitconfig.
+    export GIT_CONFIG_COUNT=1
+    export GIT_CONFIG_KEY_0="credential.https://github.com.helper"
+    export GIT_CONFIG_VALUE_0="$BIN_DIR/git-credential-worki"
+    export GIT_TERMINAL_PROMPT=0
+else
+    log "AVISO: nao consegui preparar as credenciais do agente; ele fica sem GitHub e Vercel"
+fi
+
 LOG_LEVEL="${LOG_LEVEL:-INFO}"
 export LOG_LEVEL
 

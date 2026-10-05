@@ -62,7 +62,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from integracoes.config import Config  # noqa: E402
 from integracoes.evolution import cliente as ev  # noqa: E402
 from integracoes.evolution import formato  # noqa: E402
-from integracoes import memoria  # noqa: E402
+from integracoes import ferramentas, memoria  # noqa: E402
 from integracoes.hermes.adapter import Adaptador  # noqa: E402
 from integracoes.supabase import queue as db  # noqa: E402
 
@@ -255,6 +255,8 @@ class Relay:
         except Exception as e:  # noqa: BLE001
             log.warning("memorias indisponiveis, seguindo sem elas: %s", e)
 
+        partes.append(ferramentas.linha_de_ferramentas())
+
         partes.append(
             "Converse em pt-BR. Resposta curta, de conversa humana. "
             "Zero emoji decorativo. Se a acao exigir aprovacao humana "
@@ -271,6 +273,12 @@ class Relay:
             "titulos com '#', sem blocos de codigo a menos que o dono peça. "
             "Texto para copiar (prompt, comando, codigo) vai sozinho num "
             "bloco proprio, separado do resto, nunca no meio de uma frase."
+        )
+        partes.append(
+            "Brevidade: resultado primeiro, em ate 6 linhas. Nao liste o "
+            "que voce verificou nem conte erros intermediarios, a menos que o "
+            "dono pergunte; so o que ele precisa para decidir ou usar. Uma "
+            "pergunta por vez. Detalhe so se ele pedir."
         )
         return "\n\n".join(partes)
 

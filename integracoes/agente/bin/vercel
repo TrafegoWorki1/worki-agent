@@ -1,0 +1,15 @@
+#!/bin/sh
+# Wrapper do vercel: passa o token do arquivo so a este processo.
+CRED="${WORKI_CREDENCIAIS_DIR:-/opt/data/.credenciais}"
+if [ -r "$CRED/vercel_token" ]; then
+    VERCEL_TOKEN="$(cat "$CRED/vercel_token")"
+    export VERCEL_TOKEN
+fi
+REAL="${WORKI_REAL_VERCEL:-}"
+if [ -z "$REAL" ]; then
+    for c in /usr/local/bin/vercel /usr/bin/vercel; do
+        [ -x "$c" ] && REAL="$c" && break
+    done
+fi
+[ -n "$REAL" ] || { echo "vercel nao encontrado na imagem" >&2; exit 127; }
+exec "$REAL" "$@"
